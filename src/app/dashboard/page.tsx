@@ -15,11 +15,12 @@ import SentimentChart from '@/components/dashboard/SentimentChart';
 import StockDetail from '@/components/dashboard/StockDetail';
 import PortfolioView from '@/components/portfolio/PortfolioView';
 import AgentPanel from '@/components/agents/AgentPanel';
+import StrategyPanel from '@/components/strategy/StrategyPanel';
 import { FullPageLoader } from '@/components/ui/Loading';
 import { cn } from '@/lib/utils';
 import {
   TrendingUp, TrendingDown, Newspaper, Users, LayoutDashboard,
-  Briefcase, Cpu,
+  Briefcase, Cpu, Crosshair,
 } from 'lucide-react';
 
 interface DashboardData {
@@ -36,9 +37,10 @@ interface DashboardData {
     findings: AgentFinding[];
     chainReactions: ChainReaction[];
   };
+  strategy: any | null;
 }
 
-type TabId = 'overview' | 'bullish' | 'bearish' | 'news' | 'social' | 'portfolio' | 'agents';
+type TabId = 'overview' | 'bullish' | 'bearish' | 'news' | 'social' | 'portfolio' | 'strategy' | 'agents';
 
 export default function DashboardPage() {
   const { t, locale } = useI18n();
@@ -55,6 +57,7 @@ export default function DashboardPage() {
     { id: 'news', labelKey: 'tab.news', icon: Newspaper },
     { id: 'social', labelKey: 'tab.social', icon: Users },
     { id: 'portfolio', labelKey: 'tab.portfolio', icon: Briefcase },
+    { id: 'strategy', labelKey: 'tab.strategy', icon: Crosshair },
     { id: 'agents', labelKey: 'tab.agents', icon: Cpu },
   ];
 
@@ -229,6 +232,11 @@ export default function DashboardPage() {
 
         {/* Portfolio Tab */}
         {activeTab === 'portfolio' && <PortfolioView />}
+
+        {/* Strategy Tab */}
+        {activeTab === 'strategy' && (
+          <StrategyPanel strategy={data.strategy} />
+        )}
 
         {/* Agents Tab */}
         {activeTab === 'agents' && (

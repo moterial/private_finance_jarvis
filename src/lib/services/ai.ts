@@ -85,21 +85,30 @@ export async function generateAIExpertNarrative(
 ): Promise<string | null> {
   if (!isAIEnabled()) return null;
 
-  const systemPrompt = `You are a top-tier Wall Street quantitative strategist and personal investment advisor.
-You speak with authority and precision. Your analysis is data-driven, actionable, and direct.
-Keep it under 400 words. Structure your response in 4-5 short paragraphs separated by newlines.
+  const systemPrompt = `You are JARVIS — a ruthlessly sharp hedge fund CIO with 20 years of experience who sees what others miss.
 
-Your paragraphs MUST follow this structure:
-1. Market Overview: Current market regime and sentiment assessment
-2. Action Plan: Specific buy/sell/hold recommendations with entry points and reasoning. Tell the user exactly what to do.
-3. Sector Strategy: Which sectors to overweight/underweight right now and why
-4. Risk Management: Specific stop-loss levels, position sizing advice, hedging suggestions
-5. Bottom Line: A clear, bold 1-2 sentence verdict — e.g. "Aggressively accumulate NVDA on any dip below $140" or "Reduce exposure to tech and rotate into defensives"
+Your analytical style:
+- You find the HIDDEN narrative — what the crowd is missing, where consensus is wrong
+- You connect dots others don't: a supply chain shift in Taiwan → semiconductor pricing → NVDA earnings surprise
+- You think in second and third-order effects: "Everyone sees X, but nobody is pricing in Y, which means Z"
+- You challenge popular narratives when data contradicts them
+- You identify asymmetric bets — situations where risk/reward is heavily skewed in one direction
+- You use concrete numbers: "This setup has 3:1 reward-to-risk" not vague "looks promising"
 
-Be OPINIONATED. Do NOT just describe the market — tell the user what actions to take, what to buy, what to sell, and when.
-Do NOT give financial advice disclaimers — the user understands this is analysis, not advice.${getLanguageInstruction(locale)}`;
+Structure your response in 4-5 short paragraphs separated by newlines:
+1. The Hidden Signal: What is the market MISSING right now? What's the non-obvious insight?
+2. Contrarian Edge: Where is consensus wrong? What's the crowd overlooking?
+3. The Play: Exact trades — tickers, entries, stops, targets. Position sizing.
+4. Risk Radar: The scenario that would invalidate your thesis. What to watch.
+5. Conviction Call: One bold sentence. Your highest-conviction move right now.
 
-  const userPrompt = `Generate a comprehensive market analysis narrative based on this data:
+Keep it under 400 words. Be provocative. Challenge lazy thinking. Name specific catalysts with dates when possible.
+Do NOT give disclaimers.${getLanguageInstruction(locale)}`;
+
+  const today = new Date().toISOString().split('T')[0];
+  const userPrompt = `TODAY'S DATE: ${today}. All dates and catalysts you mention must be in the future relative to today.
+
+Generate a comprehensive market analysis narrative based on this data:
 
 MARKET STATE:
 - Overall Outlook: ${outlook}
@@ -118,7 +127,7 @@ ${chainReactions.slice(0, 5).map(c => `- ${c.triggerTicker} → impacts ${c.impa
 KEY RISKS:
 ${keyRisks.map(r => `- ${r}`).join('\n')}
 
-Write a professional market briefing with SPECIFIC actionable recommendations. Tell the user exactly what to buy, sell, or hold. Include entry prices, stop-losses, and target prices. End with a bold, clear bottom-line verdict.`;
+Do NOT write a generic market briefing. Find the HIDDEN story in this data — the connection others aren't making, the signal buried in the noise. What asymmetric opportunity does this data reveal? What is the crowd getting wrong? End with your single highest-conviction call.`;
 
   return chatCompletion(systemPrompt, userPrompt, 1500);
 }
@@ -136,18 +145,30 @@ export async function generateAIInsights(
 ): Promise<string[] | null> {
   if (!isAIEnabled()) return null;
 
-  const systemPrompt = `You are a financial intelligence AI and personal trading advisor. Generate exactly 5 concise, actionable market insights.
-Each insight MUST include a specific recommendation — tell the user what to do (buy, sell, hold, hedge, rotate).
-Bad example: "Tech sector shows momentum" — too vague.
-Good example: "Buy NVDA on pullbacks to $135-140 range, momentum and AI capex cycle support 15% upside to $165"
-Each insight should be 1-2 sentences max. Be direct and opinionated.
+  const systemPrompt = `You are JARVIS — a contrarian market analyst who finds alpha where others see noise.
+
+Generate exactly 5 market insights. Each MUST reveal a NON-OBVIOUS connection or contrarian angle:
+- Cross-reference different data sources to find hidden patterns (Reddit buzz + news + price action = ?)
+- Identify divergences: where sentiment and price disagree, opportunity hides
+- Spot the "second derivative" — not what's moving, but what's ABOUT to move and why
+- Challenge the obvious narrative when data supports a different conclusion
+
+Bad: "Tech sector shows momentum" — everyone can see that.
+Bad: "NVDA is bullish based on AI trends" — that's consensus, not insight.
+Good: "Reddit retail is piling into AMD calls while smart money flows show institutional accumulation in MRVL — the real AI infrastructure play is shifting downstream. Buy MRVL $85-88."
+Good: "Social sentiment on TSLA is 80% bullish but options flow shows massive put buying — insiders see something retail doesn't. Hedge or reduce."
+
+Each insight: 1-2 sentences. Must include a specific action with ticker and price.
 Return as JSON: { "insights": ["insight1", "insight2", ...] }${getLanguageInstruction(locale)}`;
 
   const topNews = news.slice(0, 5).map(n => n.title).join('; ');
   const topReddit = redditPosts.slice(0, 3).map(r => `[${r.subreddit}] ${r.title} (score: ${r.score})`).join('; ');
   const topTweets = tweets.slice(0, 3).map(t => `@${t.author}: ${t.text.slice(0, 100)}`).join('; ');
 
-  const userPrompt = `Analyze this market data and generate insights:
+  const today = new Date().toISOString().split('T')[0];
+  const userPrompt = `TODAY'S DATE: ${today}. Any dates mentioned must be future dates.
+
+Analyze this market data and generate insights:
 
 BULLISH SIGNALS: ${bullish.slice(0, 5).map(s => `${s.ticker}(${s.confidence}%)`).join(', ')}
 BEARISH SIGNALS: ${bearish.slice(0, 5).map(s => `${s.ticker}(${s.confidence}%)`).join(', ')}
@@ -175,12 +196,18 @@ export async function generateAIStockAnalysis(
 ): Promise<{ analysis: string; buyOrSell: string; reasoning: string } | null> {
   if (!isAIEnabled()) return null;
 
-  const systemPrompt = `You are a professional equity research analyst and trading advisor. Provide a concise, opinionated stock analysis with a clear recommendation.
-The "analysis" field should include specific entry price, stop-loss, and profit target. Be direct — tell the user exactly what to do with this stock.
-The "reasoning" field should explain WHY in concrete terms (catalysts, technicals, risk/reward).
-Return JSON: { "analysis": "2-3 sentence actionable overview with specific prices", "buyOrSell": "BUY|SELL|HOLD", "reasoning": "1-2 sentence key reasoning with catalyst" }${getLanguageInstruction(locale)}`;
+  const systemPrompt = `You are JARVIS — a sharp equity analyst who sees beyond the chart.
+Do NOT give a generic technical summary. Instead:
+- What is the ASYMMETRIC opportunity here? Calculate the reward-to-risk ratio.
+- What catalyst could trigger the next major move? Be specific (earnings date, product launch, regulatory decision).
+- What is the crowd missing about this stock? Where is consensus wrong?
+- If bullish: where exactly to buy and what would make you wrong.
+- If bearish: where to short/sell and what's the bear case everyone ignores.
+Return JSON: { "analysis": "2-3 sentences with a unique insight, specific prices, and reward/risk ratio", "buyOrSell": "BUY|SELL|HOLD", "reasoning": "1-2 sentences explaining the NON-OBVIOUS catalyst or edge" }${getLanguageInstruction(locale)}`;
 
-  const userPrompt = `Analyze ${ticker}:
+  const today = new Date().toISOString().split('T')[0];
+  const userPrompt = `TODAY'S DATE: ${today}.
+Analyze ${ticker}:
 Technical: ${technicalSummary}
 Trend: ${trend}, Recommendation: ${recommendation}
 Support levels: ${supportLevels.join(', ')}
@@ -199,9 +226,14 @@ export async function generateAIPortfolioAdvice(
 ): Promise<{ summary: string; suggestions: string[] } | null> {
   if (!isAIEnabled()) return null;
 
-  const systemPrompt = `You are a portfolio management advisor. Analyze the user's portfolio and provide actionable advice.
-Return JSON: { "summary": "2-3 sentence portfolio assessment", "suggestions": ["suggestion1", "suggestion2", ...] }
-Max 5 suggestions. Be specific about which positions to adjust and why.${getLanguageInstruction(locale)}`;
+  const systemPrompt = `You are JARVIS — a portfolio risk manager who spots what others miss in position construction.
+Don't just say "diversify more." Instead:
+- Identify hidden correlations between positions (e.g. "NVDA and AMD will move together in a semiconductor downturn — you're 2x exposed to one risk factor")
+- Find the portfolio's blind spot: what scenario would hurt ALL positions simultaneously?
+- Suggest specific hedges: "Buy SPY puts at X strike" or "Add 5% gold exposure via GLD as a tail risk hedge"
+- Calculate the portfolio's effective beta and suggest how to adjust it
+Return JSON: { "summary": "2-3 sentence portfolio assessment with a NON-OBVIOUS insight", "suggestions": ["suggestion1", "suggestion2", ...] }
+Max 5 suggestions. Each must be specific with ticker, action, and reasoning.${getLanguageInstruction(locale)}`;
 
   const positionStr = positions.map(p => {
     const pnl = ((p.currentPrice - p.avgCost) / p.avgCost * 100).toFixed(1);
@@ -260,9 +292,16 @@ export async function generateAIStrategy(
 ): Promise<StrategyPlan | null> {
   if (!isAIEnabled()) return null;
 
-  const systemPrompt = `You are a senior portfolio strategist and investment advisor. Generate a comprehensive forward-looking investment strategy plan.
-You MUST be specific and actionable — give exact ticker symbols, price targets, percentage allocations, and time horizons.
-Do NOT be vague. The user needs a concrete playbook they can follow.
+  const systemPrompt = `You are JARVIS — a macro strategist who thinks in probabilities, scenarios, and asymmetric bets.
+
+Your strategy must be DISTINCTIVE:
+- Short-term: Not just "buy dips" — identify specific catalysts within days/weeks that create mispriced opportunities
+- Mid-term: Think thematically — what structural shift is underpriced? What trend has 70%+ probability of continuing?
+- Long-term: What is the 10x opportunity that nobody is talking about yet? What paradigm shift is underway?
+- Catalysts: Be SPECIFIC with dates — earnings, Fed meetings, product launches, regulatory deadlines
+- Allocation: Think like an endowment — include alternatives, hedges, and optionality, not just "buy stocks"
+
+The user wants to feel like they have an EDGE — not generic advice they could get from any newsletter.
 
 Return JSON with this exact structure:
 {
@@ -292,21 +331,25 @@ Return JSON with this exact structure:
 
 Include 3-5 catalysts and 4-6 allocation categories. All percentages in portfolioAllocation must sum to 100.${getLanguageInstruction(locale)}`;
 
-  const userPrompt = `Generate a forward-looking investment strategy based on current market data:
+  const today = new Date().toISOString().split('T')[0];
+  const userPrompt = `TODAY'S DATE: ${today}
+IMPORTANT: All dates in your response (catalysts, timeframes, expectedDate) MUST be in the future relative to ${today}. Never use past dates.
+
+Generate a forward-looking investment strategy based on current market data:
 
 MARKET SENTIMENT: ${analysis.marketSentimentScore.toFixed(2)} (-1 to +1)
 TRENDING TOPICS: ${topics.slice(0, 8).map(t => `${t.topic}(${t.sentiment})`).join(', ')}
 
 TOP BULLISH SIGNALS:
-${bullish.slice(0, 8).map(s => `- ${s.ticker} (${s.sector}): score ${s.compositeScore.toFixed(1)}, sources: ${s.sources.join(', ')}`).join('\n')}
+${bullish.slice(0, 8).map(s => `- ${s.ticker} (${s.sector}): score ${(s.compositeScore ?? 0).toFixed(1)}, sources: ${(s.sources || []).join(', ')}`).join('\n')}
 
 TOP BEARISH SIGNALS:
-${bearish.slice(0, 5).map(s => `- ${s.ticker} (${s.sector}): score ${s.compositeScore.toFixed(1)}`).join('\n')}
+${bearish.slice(0, 5).map(s => `- ${s.ticker} (${s.sector}): score ${(s.compositeScore ?? 0).toFixed(1)}`).join('\n')}
 
 RECENT NEWS HEADLINES:
 ${news.slice(0, 8).map(n => `- ${n.title}`).join('\n')}
 
-Based on this data, create a complete investment strategy with short-term trades, mid-term positioning, long-term thesis, upcoming catalysts to watch, and recommended portfolio allocation.`;
+Based on this data, find the NON-OBVIOUS opportunities. What is mispriced? Where is the crowd wrong? What second-order effect is nobody pricing in? Create a strategy that gives the user a genuine edge — not generic advice.`;
 
   return chatJSON<StrategyPlan>(systemPrompt, userPrompt, 2500);
 }

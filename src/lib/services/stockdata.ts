@@ -90,25 +90,32 @@ async function getQuoteYahoo(ticker: string): Promise<StockQuote | null> {
 }
 
 // ============ Real Candle Data ============
-export async function getRealCandles(ticker: string, days: number = 60): Promise<CandleData[] | null> {
+export async function getRealCandles(ticker: string, days: number = 60, interval: string = '1d'): Promise<CandleData[] | null> {
   // Try Finnhub first
-  const fhCandles = await getCandlesFinnhub(ticker, days);
+  const fhCandles = await getCandlesFinnhub(ticker, days, interval);
   if (fhCandles) return fhCandles;
 
   // Fallback to Yahoo Finance
-  return getCandlesYahoo(ticker, days);
+  return getCandlesYahoo(ticker, days, interval);
 }
 
-async function getCandlesFinnhub(ticker: string, days: number): Promise<CandleData[] | null> {
+async function getCandlesFinnhub(ticker: string, days: number, interval: string = '1d'): Promise<CandleData[] | null> {
   const key = getFinnhubKey();
   if (!key) return null;
 
   const now = Math.floor(Date.now() / 1000);
   const from = now - days * 24 * 60 * 60;
 
+  // Map interval to Finnhub resolution
+  const resolutionMap: Record<string, string> = {
+    '5m': '5', '15m': '15', '30m': '30', '1h': '60',
+    '1d': 'D', '1wk': 'W', '1mo': 'M',
+  };
+  const resolution = resolutionMap[interval] || 'D';
+
   try {
     const res = await fetch(
-      `${FH_BASE}/stock/candle?symbol=${encodeURIComponent(ticker)}&resolution=D&from=${from}&to=${now}&token=${encodeURIComponent(key)}`
+      `${FH_BASE}/stock/candle?symbol=${encodeURIComponent(ticker)}&resolution=${resolution}&from=${from}&to=${now}&token=${encodeURIComponent(key)}`
     );
     if (!res.ok) return null;
     const d = await res.json();
@@ -132,10 +139,26 @@ async function getCandlesFinnhub(ticker: string, days: number): Promise<CandleDa
   }
 }
 
-async function getCandlesYahoo(ticker: string, days: number): Promise<CandleData[] | null> {
+async function getCandlesYahoo(ticker: string, days: number, interval: string = '1d'): Promise<CandleData[] | null> {
   try {
+    // Map interval + days to Yahoo range/interval params
+    const yahooIntervalMap: Record<string, string> = {
+      '5m': '5m', '15m': '15m', '30m': '30m', '1h': '1h',
+      '1d': '1d', '1wk': '1wk', '1mo': '1mo',
+    };
+    const yahooInterval = yahooIntervalMap[interval] || '1d';
+
+    let range = '3mo';
+    if (days <= 1) range = '1d';
+    else if (days <= 5) range = '5d';
+    else if (days <= 30) range = '1mo';
+    else if (days <= 90) range = '3mo';
+    else if (days <= 180) range = '6mo';
+    else if (days <= 365) range = '1y';
+    else range = '2y';
+
     const res = await fetch(
-      `${YF_BASE}/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=${days > 30 ? '3mo' : '1mo'}`,
+      `${YF_BASE}/v8/finance/chart/${encodeURIComponent(ticker)}?interval=${yahooInterval}&range=${range}`,
       { headers: { 'User-Agent': 'JarvisFinance/1.0' }, next: { revalidate: 300 } }
     );
 

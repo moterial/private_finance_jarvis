@@ -15,11 +15,24 @@ export async function GET(request: NextRequest) {
 
   const upperTicker = ticker.toUpperCase();
   const locale = request.nextUrl.searchParams.get('locale') || 'en';
+  const timeframe = request.nextUrl.searchParams.get('timeframe') || '1d';
+
+  // Map timeframe to days and interval
+  const tfConfig: Record<string, { days: number; interval: string }> = {
+    '1d': { days: 1, interval: '5m' },
+    '5d': { days: 5, interval: '15m' },
+    '1mo': { days: 30, interval: '1d' },
+    '3mo': { days: 90, interval: '1d' },
+    '6mo': { days: 180, interval: '1d' },
+    '1y': { days: 365, interval: '1wk' },
+    '2y': { days: 730, interval: '1wk' },
+  };
+  const { days, interval } = tfConfig[timeframe] || tfConfig['3mo'];
 
   try {
     // Try real candle data first, fall back to synthetic
-    const realCandles = await getRealCandles(upperTicker, 60);
-    const candles = realCandles || generateCandleData(upperTicker, 60);
+    const realCandles = await getRealCandles(upperTicker, days, interval);
+    const candles = realCandles || generateCandleData(upperTicker, days);
     const isRealData = !!realCandles;
 
     const technicalReport = analyzePriceAction(candles, upperTicker);

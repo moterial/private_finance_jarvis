@@ -18,6 +18,7 @@ const translations = {
     'tab.news': 'News',
     'tab.social': 'Social',
     'tab.portfolio': 'Portfolio',
+    'tab.strategy': 'Strategy',
     'tab.agents': 'Agents',
 
     // Market
@@ -121,6 +122,16 @@ const translations = {
     'agents.chainAnalysis': 'Chain Reaction Analysis',
     'agents.confidence': 'Confidence',
 
+    // Strategy
+    'strategy.bottomLine': 'Bottom Line Verdict',
+    'strategy.shortTerm': 'Short-Term',
+    'strategy.midTerm': 'Mid-Term',
+    'strategy.longTerm': 'Long-Term',
+    'strategy.catalysts': 'Upcoming Catalysts',
+    'strategy.allocation': 'Recommended Allocation',
+    'strategy.noData': 'Strategy analysis unavailable',
+    'strategy.noDataHint': 'Enable AI to generate forward-looking strategy',
+
     // Landing
     'landing.badge': 'Real-time Market Intelligence Active',
     'landing.heroTitle1': 'Your AI-Powered',
@@ -174,6 +185,7 @@ const translations = {
     'tab.news': '新聞',
     'tab.social': '社交',
     'tab.portfolio': '投資組合',
+    'tab.strategy': '未來佈局',
     'tab.agents': '智能體',
 
     // Market
@@ -275,6 +287,17 @@ const translations = {
     'agents.status.idle': '待命',
     'agents.expertSummary': '首席分析師總結',
     'agents.chainAnalysis': '連鎖反應分析',
+    'agents.confidence': '信心指數',
+
+    // Strategy
+    'strategy.bottomLine': '核心判斷',
+    'strategy.shortTerm': '短線操作',
+    'strategy.midTerm': '中線佈局',
+    'strategy.longTerm': '長線配置',
+    'strategy.catalysts': '即將到來的催化劑',
+    'strategy.allocation': '建議資產配置',
+    'strategy.noData': '策略分析暫不可用',
+    'strategy.noDataHint': '啟用AI以生成前瞻性投資策略',
     'agents.confidence': '置信度',
 
     // Landing

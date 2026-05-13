@@ -45,6 +45,21 @@ export async function GET(request: NextRequest) {
 
     const agentResult = await orchestrateAgents(analysis, redditPosts, tweets, newsArticles, locale);
 
+    // Generate forward-looking strategy
+    let strategy = null;
+    try {
+      strategy = await generateAIStrategy(
+        analysis,
+        analysis.topBullish,
+        analysis.topBearish,
+        analysis.trendingTopics,
+        newsArticles,
+        locale,
+      );
+    } catch (e) {
+      console.error('[Strategy] Generation failed:', e);
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -61,6 +76,7 @@ export async function GET(request: NextRequest) {
           findings: agentResult.allFindings,
           chainReactions: agentResult.chainReactions,
         },
+        strategy,
         meta: {
           aiEnabled: isAIEnabled(),
           realMarketData: !!realMarket,
