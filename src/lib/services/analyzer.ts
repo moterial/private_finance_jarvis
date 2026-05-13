@@ -3,10 +3,11 @@ import { AnalysisReport, StockSignal, TrendingTopic, RedditPost, Tweet, NewsArti
 export function generateAnalysis(
   redditPosts: RedditPost[],
   tweets: Tweet[],
-  newsArticles: NewsArticle[]
+  newsArticles: NewsArticle[],
+  realPrices?: Map<string, { price: number; change: number; changePercent: number }>,
 ): AnalysisReport {
   const tickerData = aggregateTickerData(redditPosts, tweets, newsArticles);
-  const signals = generateSignals(tickerData);
+  const signals = generateSignals(tickerData, realPrices);
   const trendingTopics = extractTrendingTopics(redditPosts, tweets, newsArticles);
 
   const allSentimentScores = [
@@ -158,13 +159,18 @@ const STOCK_INFO: Record<string, { name: string; price: number; marketCap: strin
   DIS: { name: 'Walt Disney Co.', price: 112.80, marketCap: '206B', sector: 'Communication', volume: 9800000 },
 };
 
-function generateSignals(tickerData: Map<string, TickerAggregation>): StockSignal[] {
+function generateSignals(
+  tickerData: Map<string, TickerAggregation>,
+  realPrices?: Map<string, { price: number; change: number; changePercent: number }>,
+): StockSignal[] {
   const signals: StockSignal[] = [];
 
   for (const [ticker, agg] of tickerData) {
     const info = STOCK_INFO[ticker];
     if (!info) continue;
 
+    const live = realPrices?.get(ticker);
+    const price = live?.price ?? info.price;
     const avgScore = agg.scores.reduce((a, b) => a + b, 0) / agg.scores.length;
     const direction = avgScore >= 0 ? 'up' as const : 'down' as const;
 
@@ -173,13 +179,13 @@ function generateSignals(tickerData: Map<string, TickerAggregation>): StockSigna
     const sourceWeight = agg.sources.length * 7;
     const confidence = Math.min(Math.round(mentionWeight + sentimentWeight + sourceWeight), 98);
 
-    const priceChangePercent = avgScore * (2 + Math.random() * 3);
-    const priceChange = info.price * (priceChangePercent / 100);
+    const priceChange = live ? live.change : price * (avgScore * (2 + Math.random() * 3) / 100);
+    const priceChangePercent = live ? live.changePercent : (avgScore * (2 + Math.random() * 3));
 
     signals.push({
       ticker,
       name: info.name,
-      currentPrice: info.price,
+      currentPrice: price,
       priceChange: Number(priceChange.toFixed(2)),
       priceChangePercent: Number(priceChangePercent.toFixed(2)),
       sentiment: avgScore > 0.1 ? 'bullish' : avgScore < -0.1 ? 'bearish' : 'neutral',

@@ -22,19 +22,19 @@ interface StockData {
   chainReactions: ChainReaction[];
 }
 
-const STOCK_INFO: Record<string, { name: string; price: number; sector: string; marketCap: string }> = {
-  NVDA: { name: 'NVIDIA Corporation', price: 142.50, sector: 'Technology', marketCap: '3.5T' },
-  AAPL: { name: 'Apple Inc.', price: 198.30, sector: 'Technology', marketCap: '3.1T' },
-  MSFT: { name: 'Microsoft Corporation', price: 445.20, sector: 'Technology', marketCap: '3.3T' },
-  GOOGL: { name: 'Alphabet Inc.', price: 178.90, sector: 'Technology', marketCap: '2.2T' },
-  AMZN: { name: 'Amazon.com Inc.', price: 195.40, sector: 'Consumer Cyclical', marketCap: '2.0T' },
-  META: { name: 'Meta Platforms Inc.', price: 525.80, sector: 'Technology', marketCap: '1.3T' },
-  TSLA: { name: 'Tesla Inc.', price: 248.60, sector: 'Automotive', marketCap: '790B' },
-  AMD: { name: 'Advanced Micro Devices', price: 168.40, sector: 'Technology', marketCap: '272B' },
-  PLTR: { name: 'Palantir Technologies', price: 27.80, sector: 'Technology', marketCap: '62B' },
-  INTC: { name: 'Intel Corporation', price: 31.20, sector: 'Technology', marketCap: '132B' },
-  JPM: { name: 'JPMorgan Chase & Co.', price: 205.10, sector: 'Financial', marketCap: '591B' },
-  NFLX: { name: 'Netflix Inc.', price: 685.30, sector: 'Communication', marketCap: '296B' },
+const STOCK_INFO: Record<string, { name: string; sector: string; marketCap: string }> = {
+  NVDA: { name: 'NVIDIA Corporation', sector: 'Technology', marketCap: '3.5T' },
+  AAPL: { name: 'Apple Inc.', sector: 'Technology', marketCap: '3.1T' },
+  MSFT: { name: 'Microsoft Corporation', sector: 'Technology', marketCap: '3.3T' },
+  GOOGL: { name: 'Alphabet Inc.', sector: 'Technology', marketCap: '2.2T' },
+  AMZN: { name: 'Amazon.com Inc.', sector: 'Consumer Cyclical', marketCap: '2.0T' },
+  META: { name: 'Meta Platforms Inc.', sector: 'Technology', marketCap: '1.3T' },
+  TSLA: { name: 'Tesla Inc.', sector: 'Automotive', marketCap: '790B' },
+  AMD: { name: 'Advanced Micro Devices', sector: 'Technology', marketCap: '272B' },
+  PLTR: { name: 'Palantir Technologies', sector: 'Technology', marketCap: '62B' },
+  INTC: { name: 'Intel Corporation', sector: 'Technology', marketCap: '132B' },
+  JPM: { name: 'JPMorgan Chase & Co.', sector: 'Financial', marketCap: '591B' },
+  NFLX: { name: 'Netflix Inc.', sector: 'Communication', marketCap: '296B' },
 };
 
 export default function AddStockModal({ ticker, onClose }: AddStockModalProps) {
@@ -45,9 +45,10 @@ export default function AddStockModal({ ticker, onClose }: AddStockModalProps) {
   const [shares, setShares] = useState('1');
   const [avgCost, setAvgCost] = useState('');
   const [activeTab, setActiveTab] = useState<'chart' | 'technical' | 'chain' | 'ai'>('chart');
+  const [realPrice, setRealPrice] = useState<number>(0);
 
   const inPortfolio = isInPortfolio(ticker);
-  const info = STOCK_INFO[ticker] || { name: ticker, price: 100, sector: 'Unknown', marketCap: 'N/A' };
+  const info = STOCK_INFO[ticker] || { name: ticker, sector: 'Unknown', marketCap: 'N/A' };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -56,7 +57,9 @@ export default function AddStockModal({ ticker, onClose }: AddStockModalProps) {
         const json = await res.json();
         if (json.success) {
           setData(json.data);
-          setAvgCost(info.price.toFixed(2));
+          const price = json.data?.quote?.currentPrice || 0;
+          setRealPrice(price);
+          if (price > 0) setAvgCost(price.toFixed(2));
         }
       } catch (err) {
         console.error(err);
@@ -65,14 +68,14 @@ export default function AddStockModal({ ticker, onClose }: AddStockModalProps) {
       }
     };
     fetchData();
-  }, [ticker, info.price]);
+  }, [ticker, locale]);
 
   const handleAdd = () => {
     addPosition({
       ticker,
       name: info.name,
       shares: Number(shares) || 1,
-      avgCost: Number(avgCost) || info.price,
+      avgCost: Number(avgCost) || realPrice,
       notes: '',
       sector: info.sector,
     });
@@ -121,7 +124,7 @@ export default function AddStockModal({ ticker, onClose }: AddStockModalProps) {
               <p className="text-xs text-jarvis-gray-500">{info.name}</p>
             </div>
             <div className="ml-auto text-right">
-              <div className="text-lg font-mono font-semibold text-jarvis-white">{formatPrice(info.price)}</div>
+              <div className="text-lg font-mono font-semibold text-jarvis-white">{realPrice > 0 ? formatPrice(realPrice) : '...'}</div>
               <div className="text-xs text-jarvis-gray-500">{info.sector} · {info.marketCap}</div>
             </div>
           </div>

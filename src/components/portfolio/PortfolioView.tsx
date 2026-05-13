@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useI18n } from '@/lib/i18n/context';
 import { usePortfolio } from '@/lib/portfolio/store';
 import { cn, formatPrice, formatPercent } from '@/lib/utils';
@@ -11,23 +11,23 @@ import {
   FileText, Trash2, Edit3, DollarSign, PieChart,
 } from 'lucide-react';
 
-// Live prices (in a real app these come from API)
-const LIVE_PRICES: Record<string, { price: number; change: number; changePercent: number }> = {
-  NVDA: { price: 142.50, change: 3.21, changePercent: 2.31 },
-  AAPL: { price: 198.30, change: 1.45, changePercent: 0.74 },
-  MSFT: { price: 445.20, change: 5.80, changePercent: 1.32 },
-  GOOGL: { price: 178.90, change: -1.20, changePercent: -0.67 },
-  AMZN: { price: 195.40, change: 2.10, changePercent: 1.09 },
-  META: { price: 525.80, change: -3.40, changePercent: -0.64 },
-  TSLA: { price: 248.60, change: -5.80, changePercent: -2.28 },
-  AMD: { price: 168.40, change: 4.50, changePercent: 2.74 },
-  PLTR: { price: 27.80, change: 0.85, changePercent: 3.15 },
-  INTC: { price: 31.20, change: -0.45, changePercent: -1.42 },
-  JPM: { price: 205.10, change: 1.20, changePercent: 0.59 },
-  NFLX: { price: 685.30, change: 8.20, changePercent: 1.21 },
+// Fallback prices (used before API responds)
+const FALLBACK_PRICES: Record<string, { price: number; change: number; changePercent: number }> = {
+  NVDA: { price: 0, change: 0, changePercent: 0 },
+  AAPL: { price: 0, change: 0, changePercent: 0 },
+  MSFT: { price: 0, change: 0, changePercent: 0 },
+  GOOGL: { price: 0, change: 0, changePercent: 0 },
+  AMZN: { price: 0, change: 0, changePercent: 0 },
+  META: { price: 0, change: 0, changePercent: 0 },
+  TSLA: { price: 0, change: 0, changePercent: 0 },
+  AMD: { price: 0, change: 0, changePercent: 0 },
+  PLTR: { price: 0, change: 0, changePercent: 0 },
+  INTC: { price: 0, change: 0, changePercent: 0 },
+  JPM: { price: 0, change: 0, changePercent: 0 },
+  NFLX: { price: 0, change: 0, changePercent: 0 },
 };
 
-const SEARCHABLE_TICKERS = Object.keys(LIVE_PRICES);
+const SEARCHABLE_TICKERS = ['NVDA', 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'AMD', 'PLTR', 'INTC', 'JPM', 'NFLX', 'COIN', 'DIS', 'BA', 'V', 'MA', 'PYPL', 'CRM', 'ORCL', 'UBER', 'ABNB', 'SHOP', 'QCOM', 'MU', 'TSM', 'AVGO'];
 
 export default function PortfolioView() {
   const { t } = useI18n();
@@ -39,6 +39,27 @@ export default function PortfolioView() {
   const [editingShares, setEditingShares] = useState<string | null>(null);
   const [tempShares, setTempShares] = useState('');
   const [tempCost, setTempCost] = useState('');
+  const [livePrices, setLivePrices] = useState<Record<string, { price: number; change: number; changePercent: number }>>(FALLBACK_PRICES);
+
+  // Fetch real prices from API
+  const fetchPrices = useCallback(async () => {
+    const tickers = [...new Set([
+      ...portfolio.positions.map(p => p.ticker),
+      ...SEARCHABLE_TICKERS.slice(0, 15),
+    ])];
+    if (tickers.length === 0) return;
+    try {
+      const res = await fetch(`/api/quotes?tickers=${tickers.join(',')}`);
+      const json = await res.json();
+      if (json.success) setLivePrices(prev => ({ ...prev, ...json.data }));
+    } catch { /* silent */ }
+  }, [portfolio.positions]);
+
+  useEffect(() => {
+    fetchPrices();
+    const interval = setInterval(fetchPrices, 2 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [fetchPrices]);
 
   // Search results
   const searchResults = searchQuery.length > 0
@@ -50,7 +71,7 @@ export default function PortfolioView() {
 
   // Calculate portfolio stats
   const positionsWithLive = portfolio.positions.map(pos => {
-    const live = LIVE_PRICES[pos.ticker] || { price: pos.avgCost, change: 0, changePercent: 0 };
+    const live = livePrices[pos.ticker] || { price: pos.avgCost, change: 0, changePercent: 0 };
     const marketValue = pos.shares * live.price;
     const totalCost = pos.shares * pos.avgCost;
     return {
@@ -110,7 +131,7 @@ export default function PortfolioView() {
         {searchResults.length > 0 && (
           <div className="absolute top-full left-0 right-0 mt-1 z-20 glass-panel p-2 max-h-48 overflow-y-auto">
             {searchResults.map(ticker => {
-              const live = LIVE_PRICES[ticker];
+              const live = livePrices[ticker];
               const isUp = live && live.change >= 0;
               return (
                 <button

@@ -4,7 +4,7 @@ import { fetchTweets } from '@/lib/services/twitter';
 import { fetchNews } from '@/lib/services/news';
 import { generateAnalysis, getMarketOverview } from '@/lib/services/analyzer';
 import { orchestrateAgents } from '@/lib/agents/orchestrator';
-import { getRealMarketOverview } from '@/lib/services/stockdata';
+import { getRealMarketOverview, getBatchQuotes } from '@/lib/services/stockdata';
 import { generateAIInsights, generateAIStrategy, isAIEnabled } from '@/lib/services/ai';
 import { detectAnomalies } from '@/lib/services/anomaly';
 import { withCache, cacheKey } from '@/lib/cache';
@@ -28,7 +28,15 @@ export async function GET(request: NextRequest) {
       withCache('data:news', fetchNews, DATA_TTL),
     ]);
 
-    const analysis = generateAnalysis(redditPosts, tweets, newsArticles);
+    // Fetch real prices for tickers mentioned in social/news data
+    const SIGNAL_TICKERS = ['NVDA', 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'AMD', 'PLTR', 'INTC', 'JPM', 'NFLX', 'COIN', 'DIS'];
+    const realQuotes = await withCache('data:signal-prices', () => getBatchQuotes(SIGNAL_TICKERS), DATA_TTL);
+    const realPrices = new Map<string, { price: number; change: number; changePercent: number }>();
+    for (const [ticker, q] of realQuotes) {
+      realPrices.set(ticker, { price: q.currentPrice, change: q.change, changePercent: q.changePercent });
+    }
+
+    const analysis = generateAnalysis(redditPosts, tweets, newsArticles, realPrices);
 
     const marketOverview = await withCache('data:market', async () => {
       const realMarket = await getRealMarketOverview();
