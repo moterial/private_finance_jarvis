@@ -46,6 +46,7 @@ export default function DashboardPage() {
   const { t, locale } = useI18n();
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [aiLoading, setAiLoading] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [selectedStock, setSelectedStock] = useState<StockSignal | null>(null);
@@ -64,18 +65,36 @@ export default function DashboardPage() {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`/api/analyze?locale=${locale}`);
-      const json = await response.json();
-      if (json.success) {
-        setData(json.data);
+      // Phase 1: Fast load — data only, no AI (renders dashboard quickly)
+      const fastRes = await fetch(`/api/analyze?locale=${locale}&phase=fast`);
+      const fastJson = await fastRes.json();
+      if (fastJson.success) {
+        setData(fastJson.data);
         setLastRefresh(new Date().toISOString());
+        setIsLoading(false);
+
+        // Phase 2: AI enrichment in background
+        setAiLoading(true);
+        try {
+          const aiRes = await fetch(`/api/analyze?locale=${locale}&phase=ai`);
+          const aiJson = await aiRes.json();
+          if (aiJson.success) {
+            setData(aiJson.data);
+            setLastRefresh(new Date().toISOString());
+          }
+        } catch (e) {
+          console.error('AI enrichment failed:', e);
+        } finally {
+          setAiLoading(false);
+        }
+        return;
       }
     } catch (error) {
       console.error('Failed to fetch data:', error);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [locale]);
 
   useEffect(() => {
     fetchData();
@@ -102,7 +121,14 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-jarvis-black data-grid">
       <div className="fixed inset-0 bg-glow-radial pointer-events-none opacity-50" />
 
-      <Header lastRefresh={lastRefresh} isLoading={isLoading} onRefresh={fetchData} />
+      <Header lastRefresh={lastRefresh} isLoading={isLoading || aiLoading} onRefresh={fetchData} />
+
+      {aiLoading && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 bg-jarvis-gray-900/90 border border-jarvis-accent/30 rounded-lg px-4 py-2 flex items-center gap-2 backdrop-blur-sm">
+          <div className="w-3 h-3 rounded-full bg-jarvis-accent animate-pulse" />
+          <span className="text-xs font-mono text-jarvis-accent">AI ANALYSIS LOADING...</span>
+        </div>
+      )}
 
       <main className="relative max-w-[1920px] mx-auto px-4 sm:px-6 py-6">
         {/* Tabs */}
