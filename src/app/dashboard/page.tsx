@@ -16,11 +16,21 @@ import StockDetail from '@/components/dashboard/StockDetail';
 import PortfolioView from '@/components/portfolio/PortfolioView';
 import AgentPanel from '@/components/agents/AgentPanel';
 import StrategyPanel from '@/components/strategy/StrategyPanel';
+import OptionsPanel from '@/components/options/OptionsPanel';
+import EarningsPanel from '@/components/earnings/EarningsPanel';
+import AnomalyPanel from '@/components/anomaly/AnomalyPanel';
+import DebatePanel from '@/components/debate/DebatePanel';
+import AlertsPanel from '@/components/alerts/AlertsPanel';
+import BacktestPanel from '@/components/backtest/BacktestPanel';
+import MultiAssetPanel from '@/components/multi-asset/MultiAssetPanel';
+import SentimentHeatmap from '@/components/heatmap/SentimentHeatmap';
+import JournalPanel from '@/components/journal/JournalPanel';
 import { FullPageLoader } from '@/components/ui/Loading';
 import { cn } from '@/lib/utils';
 import {
   TrendingUp, TrendingDown, Newspaper, Users, LayoutDashboard,
-  Briefcase, Cpu, Crosshair,
+  Briefcase, Cpu, Crosshair, BarChart3, Calendar, AlertTriangle, Swords,
+  Bell, History, Globe, Flame, BookOpen,
 } from 'lucide-react';
 
 interface DashboardData {
@@ -38,9 +48,10 @@ interface DashboardData {
     chainReactions: ChainReaction[];
   };
   strategy: any | null;
+  anomalies: any[];
 }
 
-type TabId = 'overview' | 'bullish' | 'bearish' | 'news' | 'social' | 'portfolio' | 'strategy' | 'agents';
+type TabId = 'overview' | 'bullish' | 'bearish' | 'news' | 'social' | 'portfolio' | 'options' | 'earnings' | 'anomalies' | 'debate' | 'alerts' | 'backtest' | 'multi-asset' | 'heatmap' | 'journal' | 'strategy' | 'agents';
 
 export default function DashboardPage() {
   const { t, locale } = useI18n();
@@ -58,6 +69,15 @@ export default function DashboardPage() {
     { id: 'news', labelKey: 'tab.news', icon: Newspaper },
     { id: 'social', labelKey: 'tab.social', icon: Users },
     { id: 'portfolio', labelKey: 'tab.portfolio', icon: Briefcase },
+    { id: 'options', labelKey: 'tab.options', icon: BarChart3 },
+    { id: 'earnings', labelKey: 'tab.earnings', icon: Calendar },
+    { id: 'anomalies', labelKey: 'tab.anomalies', icon: AlertTriangle },
+    { id: 'debate', labelKey: 'tab.debate', icon: Swords },
+    { id: 'alerts', labelKey: 'tab.alerts', icon: Bell },
+    { id: 'backtest', labelKey: 'tab.backtest', icon: History },
+    { id: 'multi-asset', labelKey: 'tab.multiAsset', icon: Globe },
+    { id: 'heatmap', labelKey: 'tab.heatmap', icon: Flame },
+    { id: 'journal', labelKey: 'tab.journal', icon: BookOpen },
     { id: 'strategy', labelKey: 'tab.strategy', icon: Crosshair },
     { id: 'agents', labelKey: 'tab.agents', icon: Cpu },
   ];
@@ -258,6 +278,39 @@ export default function DashboardPage() {
 
         {/* Portfolio Tab */}
         {activeTab === 'portfolio' && <PortfolioView />}
+
+        {/* Options Tab */}
+        {activeTab === 'options' && <OptionsPanel />}
+
+        {/* Earnings Tab */}
+        {activeTab === 'earnings' && <EarningsPanel />}
+
+        {/* Anomalies Tab */}
+        {activeTab === 'anomalies' && <AnomalyPanel anomalies={data.anomalies || []} />}
+
+        {/* Debate Tab */}
+        {activeTab === 'debate' && <DebatePanel />}
+
+        {/* Alerts Tab */}
+        {activeTab === 'alerts' && <AlertsPanel />}
+
+        {/* Backtest Tab */}
+        {activeTab === 'backtest' && <BacktestPanel />}
+
+        {/* Multi-Asset Tab */}
+        {activeTab === 'multi-asset' && <MultiAssetPanel />}
+
+        {/* Sentiment Heatmap Tab */}
+        {activeTab === 'heatmap' && (
+          <SentimentHeatmap
+            redditPosts={data.rawData?.reddit || []}
+            tweets={data.rawData?.tweets || []}
+            news={data.rawData?.news || []}
+          />
+        )}
+
+        {/* Trading Journal Tab */}
+        {activeTab === 'journal' && <JournalPanel />}
 
         {/* Strategy Tab */}
         {activeTab === 'strategy' && (

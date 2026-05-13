@@ -20,6 +20,15 @@ const translations = {
     'tab.portfolio': 'Portfolio',
     'tab.strategy': 'Strategy',
     'tab.agents': 'Agents',
+    'tab.options': 'Options',
+    'tab.earnings': 'Earnings',
+    'tab.anomalies': 'Anomalies',
+    'tab.debate': 'Bull vs Bear',
+    'tab.alerts': 'Alerts',
+    'tab.backtest': 'Backtest',
+    'tab.multiAsset': 'Multi-Asset',
+    'tab.heatmap': 'Heatmap',
+    'tab.journal': 'Journal',
 
     // Market
     'market.open': 'Market Open',
@@ -187,6 +196,15 @@ const translations = {
     'tab.portfolio': '投資組合',
     'tab.strategy': '未來佈局',
     'tab.agents': '智能體',
+    'tab.options': '期權策略',
+    'tab.earnings': '財報日曆',
+    'tab.anomalies': '異常偵測',
+    'tab.debate': '多空辦論',
+    'tab.alerts': '智慧警報',
+    'tab.backtest': '回測',
+    'tab.multiAsset': '多資產',
+    'tab.heatmap': '情緒熱圖',
+    'tab.journal': '交易日誌',
 
     // Market
     'market.open': '市場開市',

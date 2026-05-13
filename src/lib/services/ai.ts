@@ -19,7 +19,7 @@ function isAIEnabled(): boolean {
 const MODEL = process.env.LLM_MODEL_NAME || 'gpt-4o-mini';
 
 // ============ Helper ============
-async function chatCompletion(systemPrompt: string, userPrompt: string, maxTokens = 1500): Promise<string | null> {
+export async function chatCompletion(systemPrompt: string, userPrompt: string, maxTokens = 1500): Promise<string | null> {
   const client = getClient();
   if (!client) return null;
 
@@ -40,7 +40,7 @@ async function chatCompletion(systemPrompt: string, userPrompt: string, maxToken
   }
 }
 
-async function chatJSON<T>(systemPrompt: string, userPrompt: string, maxTokens = 2000): Promise<T | null> {
+export async function chatJSON<T>(systemPrompt: string, userPrompt: string, maxTokens = 2000): Promise<T | null> {
   const client = getClient();
   if (!client) return null;
 
@@ -65,7 +65,7 @@ async function chatJSON<T>(systemPrompt: string, userPrompt: string, maxTokens =
 }
 
 // ============ Locale Helpers ============
-function getLanguageInstruction(locale: string): string {
+export function getLanguageInstruction(locale: string): string {
   if (locale === 'zh') {
     return '\n\nIMPORTANT: You MUST respond entirely in Traditional Chinese (繁體中文). All text, analysis, and explanations must be in Chinese.';
   }

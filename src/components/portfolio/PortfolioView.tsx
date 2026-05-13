@@ -5,6 +5,7 @@ import { useI18n } from '@/lib/i18n/context';
 import { usePortfolio } from '@/lib/portfolio/store';
 import { cn, formatPrice, formatPercent } from '@/lib/utils';
 import AddStockModal from './AddStockModal';
+import StressTestPanel from './StressTestPanel';
 import {
   Plus, Search, Briefcase, TrendingUp, TrendingDown,
   FileText, Trash2, Edit3, DollarSign, PieChart,
@@ -258,6 +259,9 @@ export default function PortfolioView() {
           })}
         </div>
       )}
+
+      {/* Stress Test */}
+      <StressTestPanel />
 
       {/* Add Stock Modal */}
       {showAddModal && (

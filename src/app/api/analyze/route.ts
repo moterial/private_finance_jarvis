@@ -6,6 +6,7 @@ import { generateAnalysis, getMarketOverview } from '@/lib/services/analyzer';
 import { orchestrateAgents } from '@/lib/agents/orchestrator';
 import { getRealMarketOverview } from '@/lib/services/stockdata';
 import { generateAIInsights, generateAIStrategy, isAIEnabled } from '@/lib/services/ai';
+import { detectAnomalies } from '@/lib/services/anomaly';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // Allow up to 60s for AI calls
@@ -33,6 +34,8 @@ export async function GET(request: NextRequest) {
     if (phase === 'fast') {
       // Return immediately with data-only results (no AI)
       const quickAgentResult = await orchestrateAgents(analysis, redditPosts, tweets, newsArticles, locale);
+      const allSignals = [...analysis.topBullish, ...analysis.topBearish];
+      const anomalies = detectAnomalies(allSignals, redditPosts, tweets, newsArticles, analysis.trendingTopics);
       return NextResponse.json({
         success: true,
         phase: 'fast',
@@ -46,6 +49,7 @@ export async function GET(request: NextRequest) {
             findings: quickAgentResult.allFindings,
             chainReactions: quickAgentResult.chainReactions,
           },
+          anomalies,
           strategy: null,
           meta: { aiEnabled: isAIEnabled(), realMarketData: !!realMarket },
         },
@@ -83,6 +87,7 @@ export async function GET(request: NextRequest) {
             findings: agentResult.allFindings,
             chainReactions: agentResult.chainReactions,
           },
+          anomalies: detectAnomalies([...analysis.topBullish, ...analysis.topBearish], redditPosts, tweets, newsArticles, analysis.trendingTopics),
           strategy,
           meta: { aiEnabled: isAIEnabled(), realMarketData: !!realMarket },
         },
@@ -123,6 +128,7 @@ export async function GET(request: NextRequest) {
           findings: agentResult.allFindings,
           chainReactions: agentResult.chainReactions,
         },
+        anomalies: detectAnomalies([...analysis.topBullish, ...analysis.topBearish], redditPosts, tweets, newsArticles, analysis.trendingTopics),
         strategy,
         meta: { aiEnabled: isAIEnabled(), realMarketData: !!realMarket },
       },
