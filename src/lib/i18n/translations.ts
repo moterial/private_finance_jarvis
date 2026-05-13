@@ -298,7 +298,6 @@ const translations = {
     'strategy.allocation': '建議資產配置',
     'strategy.noData': '策略分析暫不可用',
     'strategy.noDataHint': '啟用AI以生成前瞻性投資策略',
-    'agents.confidence': '置信度',
 
     // Landing
     'landing.badge': '即時市場情報系統運行中',
