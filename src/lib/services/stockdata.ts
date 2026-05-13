@@ -1,5 +1,5 @@
 import { CandleData } from '../types/extended';
-import { yf, yfRetry } from './yahoo';
+import { yfQuote, yfChart } from './yahoo';
 
 /**
  * Stock data service: Finnhub (if key available) → Yahoo Finance (free fallback).
@@ -61,7 +61,7 @@ async function getQuoteFinnhub(ticker: string): Promise<StockQuote | null> {
 
 async function getQuoteYahoo(ticker: string): Promise<StockQuote | null> {
   try {
-    const q = await yfRetry(() => yf.quote(ticker));
+    const q = await yfQuote(ticker);
     if (!q || !q.regularMarketPrice) return null;
 
     return {
@@ -71,10 +71,8 @@ async function getQuoteYahoo(ticker: string): Promise<StockQuote | null> {
       high: q.regularMarketDayHigh ?? q.regularMarketPrice,
       low: q.regularMarketDayLow ?? q.regularMarketPrice,
       open: q.regularMarketOpen ?? q.regularMarketPrice,
-      previousClose: q.regularMarketPreviousClose ?? 0,
-      timestamp: q.regularMarketTime instanceof Date
-        ? Math.floor(q.regularMarketTime.getTime() / 1000)
-        : Math.floor(Date.now() / 1000),
+      previousClose: q.previousClose ?? 0,
+      timestamp: Math.floor(Date.now() / 1000),
     };
   } catch (error) {
     console.error(`[Yahoo] Quote failed for ${ticker}:`, error);
@@ -143,23 +141,25 @@ async function getCandlesYahoo(ticker: string, days: number, interval: string = 
     };
     const yahooInterval = yahooIntervalMap[interval] || '1d';
 
-    const chartData = await yfRetry(() => yf.chart(ticker, {
+    const chartData = await yfChart(ticker, {
       period1: startDate.toISOString().split('T')[0],
-      interval: yahooInterval as any,
-    }));
+      interval: yahooInterval,
+    });
 
-    if (!chartData?.quotes || chartData.quotes.length === 0) return null;
+    if (!chartData?.timestamp || chartData.timestamp.length === 0) return null;
 
+    const quotes = chartData.indicators?.quote?.[0] || {};
     const candles: CandleData[] = [];
-    for (const q of chartData.quotes) {
-      if (q.open == null || q.close == null) continue;
+    for (let i = 0; i < chartData.timestamp.length; i++) {
+      const o = quotes.open?.[i], c = quotes.close?.[i];
+      if (o == null || c == null) continue;
       candles.push({
-        date: q.date instanceof Date ? q.date.toISOString().split('T')[0] : new Date(q.date).toISOString().split('T')[0],
-        open: q.open,
-        high: q.high ?? q.close,
-        low: q.low ?? q.close,
-        close: q.close,
-        volume: q.volume || 0,
+        date: new Date(chartData.timestamp[i] * 1000).toISOString().split('T')[0],
+        open: o,
+        high: quotes.high?.[i] ?? c,
+        low: quotes.low?.[i] ?? c,
+        close: c,
+        volume: quotes.volume?.[i] || 0,
       });
     }
 
@@ -351,7 +351,7 @@ export interface CompanyProfile {
 
 export async function getCompanyProfile(ticker: string): Promise<CompanyProfile | null> {
   try {
-    const q = await yfRetry(() => yf.quote(ticker));
+    const q = await yfQuote(ticker);
     if (!q) return null;
 
     return {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { chatJSON, getLanguageInstruction } from '@/lib/services/ai';
 import { withCache, cacheKey } from '@/lib/cache';
-import { yf, yfRetry } from '@/lib/services/yahoo';
+import { yfChart } from '@/lib/services/yahoo';
 
 export const dynamic = 'force-dynamic';
 
@@ -212,21 +212,23 @@ export async function POST(request: NextRequest) {
       const startDate = new Date(now);
       startDate.setMonth(startDate.getMonth() - monthsBack);
 
-      const chartData = await yfRetry(() => yf.chart(ticker, {
+      const chartData = await yfChart(ticker, {
         period1: startDate.toISOString().split('T')[0],
-        interval: '1d' as any,
-      }));
+        interval: '1d',
+      });
 
-      if (chartData?.quotes) {
-        historicalPrices = chartData.quotes
-          .filter((q: any) => q.close != null && q.date)
-          .map((q: any) => ({
-            date: q.date instanceof Date ? q.date.toISOString().split('T')[0] : new Date(q.date).toISOString().split('T')[0],
-            close: parseFloat(q.close.toFixed(2)),
-          }));
+      if (chartData?.timestamp) {
+        const quotes = chartData.indicators?.quote?.[0] || {};
+        historicalPrices = chartData.timestamp
+          .map((ts: number, i: number) => ({
+            date: new Date(ts * 1000).toISOString().split('T')[0],
+            close: quotes.close?.[i],
+          }))
+          .filter((p: any) => p.close != null)
+          .map((p: any) => ({ date: p.date, close: parseFloat(p.close.toFixed(2)) }));
       }
     } catch (e) {
-      console.error('[Backtest] yahoo-finance2 chart fetch failed:', e);
+      console.error('[Backtest] chart fetch failed:', e);
     }
 
     if (historicalPrices.length < 35) {

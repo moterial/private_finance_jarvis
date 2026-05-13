@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { yf, yfRetry } from '@/lib/services/yahoo';
+import { yfQuoteBatch } from '@/lib/services/yahoo';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,8 +55,7 @@ export async function GET() {
 
   try {
     const allSymbols = [...forexSymbols, ...commoditySymbols];
-    const quotes = await yfRetry(() => yf.quote(allSymbols));
-    const quoteArr = Array.isArray(quotes) ? quotes : [quotes];
+    const quoteArr = await yfQuoteBatch(allSymbols);
     for (const q of quoteArr) {
       if (!q || !q.symbol) continue;
       const isForex = forexSymbols.includes(q.symbol);

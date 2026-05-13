@@ -52,18 +52,14 @@ export interface StrategyLeg {
 // ============ Fetch Options Chain from Yahoo Finance ============
 export async function fetchOptionsChain(ticker: string, expirationDate?: string): Promise<OptionsChain | null> {
   try {
-    const { yf, yfRetry } = await import('./yahoo');
-    const opts: any = {};
-    if (expirationDate) {
-      opts.date = new Date(expirationDate);
-    }
+    const { yfOptions } = await import('./yahoo');
 
-    const result = await yfRetry(() => yf.options(ticker, opts));
+    const result = await yfOptions(ticker, expirationDate);
     if (!result || !result.options || result.options.length === 0) return null;
 
     const currentPrice = result.quote?.regularMarketPrice ?? 0;
-    const expirationDates = (result.expirationDates || []).map((d: Date) =>
-      d.toISOString().split('T')[0]
+    const expirationDates = (result.expirationDates || []).map((ts: number) =>
+      new Date(ts * 1000).toISOString().split('T')[0]
     );
 
     const mapContract = (c: any, type: 'call' | 'put'): OptionContract => ({
@@ -75,9 +71,11 @@ export async function fetchOptionsChain(ticker: string, expirationDate?: string)
       volume: c.volume ?? 0,
       openInterest: c.openInterest ?? 0,
       impliedVolatility: c.impliedVolatility ?? 0,
-      expiration: c.expiration instanceof Date
-        ? c.expiration.toISOString().split('T')[0]
-        : new Date((c.expiration ?? 0) * 1000).toISOString().split('T')[0],
+      expiration: typeof c.expiration === 'number'
+        ? new Date(c.expiration * 1000).toISOString().split('T')[0]
+        : c.expiration instanceof Date
+          ? c.expiration.toISOString().split('T')[0]
+          : String(c.expiration || ''),
       type,
       inTheMoney: c.inTheMoney ?? false,
     });
