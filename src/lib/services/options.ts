@@ -59,7 +59,11 @@ export async function fetchOptionsChain(ticker: string, expirationDate?: string)
 
     const res = await yahooFetch(url, { revalidate: 300 });
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      console.error(`[Options] Yahoo returned ${res.status} for ${ticker}: ${text.slice(0, 200)}`);
+      return null;
+    }
     const data = await res.json();
     const result = data.optionChain?.result?.[0];
     if (!result) return null;

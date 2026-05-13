@@ -6,31 +6,87 @@ let cachedCrumb: string | null = null;
 let cachedCookie: string | null = null;
 let crumbExpiry = 0;
 
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
 const CRUMB_TTL = 10 * 60 * 1000; // 10 minutes
 
 async function refreshCrumb(): Promise<{ crumb: string; cookie: string }> {
-  // Step 1: Hit fc.yahoo.com to get the auth cookie
-  const cookieRes = await fetch('https://fc.yahoo.com', {
-    headers: { 'User-Agent': UA },
-    redirect: 'manual',
-  });
-  const setCookieHeader = cookieRes.headers.get('set-cookie') || '';
-  // Extract all cookie values
+  // Strategy 1: consent page approach (works from datacenters)
+  try {
+    const consentRes = await fetch('https://consent.yahoo.com/v2/collectConsent?sessionId=1', {
+      headers: { 'User-Agent': UA },
+      redirect: 'manual',
+    });
+    const consentCookies = extractCookies(consentRes);
+    if (consentCookies) {
+      const crumbRes = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+        headers: { 'User-Agent': UA, 'Cookie': consentCookies },
+      });
+      if (crumbRes.ok) {
+        const crumb = await crumbRes.text();
+        if (crumb && !crumb.includes('{') && !crumb.includes('<')) {
+          console.log('[Yahoo] Got crumb via consent approach');
+          return { crumb, cookie: consentCookies };
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Yahoo] Consent approach failed:', e);
+  }
+
+  // Strategy 2: fc.yahoo.com approach (original)
+  try {
+    const cookieRes = await fetch('https://fc.yahoo.com', {
+      headers: { 'User-Agent': UA },
+      redirect: 'manual',
+    });
+    const cookies = extractCookies(cookieRes);
+    if (cookies) {
+      const crumbRes = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+        headers: { 'User-Agent': UA, 'Cookie': cookies },
+      });
+      if (crumbRes.ok) {
+        const crumb = await crumbRes.text();
+        if (crumb && !crumb.includes('{') && !crumb.includes('<')) {
+          console.log('[Yahoo] Got crumb via fc.yahoo.com');
+          return { crumb, cookie: cookies };
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Yahoo] fc.yahoo.com approach failed:', e);
+  }
+
+  // Strategy 3: finance.yahoo.com homepage scrape
+  try {
+    const homeRes = await fetch('https://finance.yahoo.com/quote/AAPL/', {
+      headers: { 'User-Agent': UA },
+      redirect: 'follow',
+    });
+    const homeCookies = extractCookies(homeRes);
+    if (homeCookies) {
+      const crumbRes = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+        headers: { 'User-Agent': UA, 'Cookie': homeCookies },
+      });
+      if (crumbRes.ok) {
+        const crumb = await crumbRes.text();
+        if (crumb && !crumb.includes('{') && !crumb.includes('<')) {
+          console.log('[Yahoo] Got crumb via finance.yahoo.com');
+          return { crumb, cookie: homeCookies };
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[Yahoo] finance.yahoo.com approach failed:', e);
+  }
+
+  throw new Error('All Yahoo crumb strategies failed');
+}
+
+function extractCookies(res: Response): string | null {
+  const setCookieHeader = res.headers.get('set-cookie') || '';
+  if (!setCookieHeader) return null;
   const cookies = setCookieHeader.split(',').map(c => c.split(';')[0].trim()).filter(Boolean).join('; ');
-
-  // Step 2: Use the cookie to get a crumb
-  const crumbRes = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
-    headers: {
-      'User-Agent': UA,
-      'Cookie': cookies,
-    },
-  });
-  if (!crumbRes.ok) throw new Error(`Failed to get Yahoo crumb: ${crumbRes.status}`);
-  const crumb = await crumbRes.text();
-  if (!crumb || crumb.includes('{')) throw new Error('Invalid crumb response');
-
-  return { crumb, cookie: cookies };
+  return cookies || null;
 }
 
 async function getCrumb(): Promise<{ crumb: string; cookie: string }> {
