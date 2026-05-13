@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { chatJSON, getLanguageInstruction } from '@/lib/services/ai';
-import { yahooFetch, YF_BASE } from '@/lib/services/yahoo';
 import { withCache, cacheKey } from '@/lib/cache';
+import { yf } from '@/lib/services/yahoo';
 
 export const dynamic = 'force-dynamic';
 
@@ -199,59 +199,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Missing ticker or strategy' }, { status: 400 });
     }
 
-    // Fetch historical data from Yahoo
+    // Fetch historical data using yahoo-finance2 package
     const periodMap: Record<string, string> = { '3mo': '3mo', '6mo': '6mo', '1y': '1y', '2y': '2y' };
     const range = periodMap[period] || '6mo';
 
-    // Try authenticated Yahoo fetch first, fallback to unauthenticated chart API
     let historicalPrices: PricePoint[] = [];
     try {
-      const res = await yahooFetch(
-        `${YF_BASE}/v8/finance/chart/${ticker}?range=${range}&interval=1d`
-      );
+      // Calculate period1 date from range
+      const now = new Date();
+      const months: Record<string, number> = { '3mo': 3, '6mo': 6, '1y': 12, '2y': 24 };
+      const monthsBack = months[range] || 6;
+      const startDate = new Date(now);
+      startDate.setMonth(startDate.getMonth() - monthsBack);
 
-      if (res.ok) {
-        const data = await res.json();
-        const result = data.chart?.result?.[0];
-        if (result) {
-          const timestamps = result.timestamp || [];
-          const closes = result.indicators?.quote?.[0]?.close || [];
-          historicalPrices = timestamps.map((ts: number, i: number) => ({
-            date: new Date(ts * 1000).toISOString().split('T')[0],
-            close: closes[i] != null ? parseFloat(closes[i].toFixed(2)) : null,
-          })).filter((p: any) => p.close != null);
-        }
+      const chartData = await yf.chart(ticker, {
+        period1: startDate.toISOString().split('T')[0],
+        interval: '1d' as any,
+      });
+
+      if (chartData?.quotes) {
+        historicalPrices = chartData.quotes
+          .filter((q: any) => q.close != null && q.date)
+          .map((q: any) => ({
+            date: q.date instanceof Date ? q.date.toISOString().split('T')[0] : new Date(q.date).toISOString().split('T')[0],
+            close: parseFloat(q.close.toFixed(2)),
+          }));
       }
     } catch (e) {
-      console.warn('[Backtest] Yahoo authenticated fetch failed:', e);
-    }
-
-    // Fallback: try chart API without auth (sometimes works for chart data)
-    if (historicalPrices.length < 35) {
-      try {
-        const fallbackRes = await fetch(
-          `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=${range}&interval=1d`,
-          { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } }
-        );
-        if (fallbackRes.ok) {
-          const data = await fallbackRes.json();
-          const result = data.chart?.result?.[0];
-          if (result) {
-            const timestamps = result.timestamp || [];
-            const closes = result.indicators?.quote?.[0]?.close || [];
-            historicalPrices = timestamps.map((ts: number, i: number) => ({
-              date: new Date(ts * 1000).toISOString().split('T')[0],
-              close: closes[i] != null ? parseFloat(closes[i].toFixed(2)) : null,
-            })).filter((p: any) => p.close != null);
-          }
-        }
-      } catch (e) {
-        console.warn('[Backtest] Fallback chart fetch also failed:', e);
-      }
+      console.error('[Backtest] yahoo-finance2 chart fetch failed:', e);
     }
 
     if (historicalPrices.length < 35) {
-      return NextResponse.json({ success: false, error: 'Insufficient historical data — Yahoo Finance may be blocking this server' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Insufficient historical data' }, { status: 400 });
     }
 
     // Run simulation locally — instant

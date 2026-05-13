@@ -1,5 +1,5 @@
 import { CandleData } from '../types/extended';
-import { yahooFetch, YF_BASE } from './yahoo';
+import { yf } from './yahoo';
 
 /**
  * Stock data service: Finnhub (if key available) → Yahoo Finance (free fallback).
@@ -61,26 +61,20 @@ async function getQuoteFinnhub(ticker: string): Promise<StockQuote | null> {
 
 async function getQuoteYahoo(ticker: string): Promise<StockQuote | null> {
   try {
-    const res = await yahooFetch(
-      `${YF_BASE}/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`,
-      { revalidate: 60 }
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    const meta = data?.chart?.result?.[0]?.meta;
-    if (!meta || !meta.regularMarketPrice) return null;
+    const q = await yf.quote(ticker);
+    if (!q || !q.regularMarketPrice) return null;
 
     return {
-      currentPrice: meta.regularMarketPrice,
-      change: meta.regularMarketPrice - (meta.chartPreviousClose || meta.previousClose || 0),
-      changePercent: meta.chartPreviousClose
-        ? ((meta.regularMarketPrice - meta.chartPreviousClose) / meta.chartPreviousClose) * 100
-        : 0,
-      high: meta.regularMarketDayHigh || meta.regularMarketPrice,
-      low: meta.regularMarketDayLow || meta.regularMarketPrice,
-      open: meta.regularMarketOpen || meta.regularMarketPrice,
-      previousClose: meta.chartPreviousClose || meta.previousClose || 0,
-      timestamp: meta.regularMarketTime || Math.floor(Date.now() / 1000),
+      currentPrice: q.regularMarketPrice,
+      change: q.regularMarketChange ?? 0,
+      changePercent: q.regularMarketChangePercent ?? 0,
+      high: q.regularMarketDayHigh ?? q.regularMarketPrice,
+      low: q.regularMarketDayLow ?? q.regularMarketPrice,
+      open: q.regularMarketOpen ?? q.regularMarketPrice,
+      previousClose: q.regularMarketPreviousClose ?? 0,
+      timestamp: q.regularMarketTime instanceof Date
+        ? Math.floor(q.regularMarketTime.getTime() / 1000)
+        : Math.floor(Date.now() / 1000),
     };
   } catch (error) {
     console.error(`[Yahoo] Quote failed for ${ticker}:`, error);
@@ -140,46 +134,32 @@ async function getCandlesFinnhub(ticker: string, days: number, interval: string 
 
 async function getCandlesYahoo(ticker: string, days: number, interval: string = '1d'): Promise<CandleData[] | null> {
   try {
-    // Map interval + days to Yahoo range/interval params
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
     const yahooIntervalMap: Record<string, string> = {
       '5m': '5m', '15m': '15m', '30m': '30m', '1h': '1h',
       '1d': '1d', '1wk': '1wk', '1mo': '1mo',
     };
     const yahooInterval = yahooIntervalMap[interval] || '1d';
 
-    let range = '3mo';
-    if (days <= 1) range = '1d';
-    else if (days <= 5) range = '5d';
-    else if (days <= 30) range = '1mo';
-    else if (days <= 90) range = '3mo';
-    else if (days <= 180) range = '6mo';
-    else if (days <= 365) range = '1y';
-    else range = '2y';
+    const chartData = await yf.chart(ticker, {
+      period1: startDate.toISOString().split('T')[0],
+      interval: yahooInterval as any,
+    });
 
-    const res = await yahooFetch(
-      `${YF_BASE}/v8/finance/chart/${encodeURIComponent(ticker)}?interval=${yahooInterval}&range=${range}`,
-      { revalidate: 300 }
-    );
-
-    if (!res.ok) return null;
-    const data = await res.json();
-
-    const result = data?.chart?.result?.[0];
-    if (!result?.timestamp || !result?.indicators?.quote?.[0]) return null;
-
-    const timestamps: number[] = result.timestamp;
-    const q = result.indicators.quote[0];
+    if (!chartData?.quotes || chartData.quotes.length === 0) return null;
 
     const candles: CandleData[] = [];
-    for (let i = 0; i < timestamps.length; i++) {
-      if (q.open[i] == null || q.close[i] == null) continue;
+    for (const q of chartData.quotes) {
+      if (q.open == null || q.close == null) continue;
       candles.push({
-        date: new Date(timestamps[i] * 1000).toISOString().split('T')[0],
-        open: q.open[i],
-        high: q.high[i],
-        low: q.low[i],
-        close: q.close[i],
-        volume: q.volume[i] || 0,
+        date: q.date instanceof Date ? q.date.toISOString().split('T')[0] : new Date(q.date).toISOString().split('T')[0],
+        open: q.open,
+        high: q.high ?? q.close,
+        low: q.low ?? q.close,
+        close: q.close,
+        volume: q.volume || 0,
       });
     }
 
@@ -371,22 +351,14 @@ export interface CompanyProfile {
 
 export async function getCompanyProfile(ticker: string): Promise<CompanyProfile | null> {
   try {
-    const res = await yahooFetch(
-      `${YF_BASE}/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`,
-      { revalidate: 3600 }
-    );
-
-    if (!res.ok) return null;
-    const data = await res.json();
-    const meta = data?.chart?.result?.[0]?.meta;
-
-    if (!meta) return null;
+    const q = await yf.quote(ticker);
+    if (!q) return null;
 
     return {
-      name: meta.shortName || meta.longName || ticker,
-      ticker: meta.symbol || ticker,
-      marketCap: 0, // Not available from chart endpoint
-      sector: meta.exchangeName || 'Unknown',
+      name: q.shortName || q.longName || ticker,
+      ticker: q.symbol || ticker,
+      marketCap: q.marketCap ?? 0,
+      sector: q.exchange || 'Unknown',
       logo: '',
       weburl: '',
     };

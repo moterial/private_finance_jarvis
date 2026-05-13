@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { yahooFetch, YF_BASE } from '@/lib/services/yahoo';
+import { yf } from '@/lib/services/yahoo';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,25 +54,20 @@ export async function GET() {
   };
 
   try {
-    const allSymbols = [...forexSymbols, ...commoditySymbols].join(',');
-    const res = await yahooFetch(
-      `${YF_BASE}/v7/finance/quote?symbols=${allSymbols}`,
-      { revalidate: 300 }
-    );
-    if (res.ok) {
-      const data = await res.json();
-      const quotes = data.quoteResponse?.result || [];
-      for (const q of quotes) {
-        const isForex = forexSymbols.includes(q.symbol);
-        assets.push({
-          symbol: q.symbol,
-          name: isForex ? (forexNames[q.symbol] || q.symbol) : (commodityNames[q.symbol] || q.shortName || q.symbol),
-          price: q.regularMarketPrice ?? 0,
-          change24h: q.regularMarketChange ?? 0,
-          changePercent24h: q.regularMarketChangePercent ?? 0,
-          category: isForex ? 'forex' : 'commodity',
-        });
-      }
+    const allSymbols = [...forexSymbols, ...commoditySymbols];
+    const quotes = await yf.quote(allSymbols);
+    const quoteArr = Array.isArray(quotes) ? quotes : [quotes];
+    for (const q of quoteArr) {
+      if (!q || !q.symbol) continue;
+      const isForex = forexSymbols.includes(q.symbol);
+      assets.push({
+        symbol: q.symbol,
+        name: isForex ? (forexNames[q.symbol] || q.symbol) : (commodityNames[q.symbol] || q.shortName || q.symbol),
+        price: q.regularMarketPrice ?? 0,
+        change24h: q.regularMarketChange ?? 0,
+        changePercent24h: q.regularMarketChangePercent ?? 0,
+        category: isForex ? 'forex' : 'commodity',
+      });
     }
   } catch (e) {
     console.error('[MultiAsset] Yahoo fetch failed:', e);

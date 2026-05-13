@@ -48,43 +48,35 @@ export async function fetchEarningsCalendar(fromDate: string, toDate: string): P
 
 // Fallback: generate upcoming earnings from well-known tickers
 async function fetchEarningsFromYahoo(): Promise<EarningsEvent[]> {
-  // Yahoo doesn't have a clean earnings calendar API, so we'll generate
-  // a useful set of upcoming major earnings from common tickers
   const majorTickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'JPM', 'V', 'WMT',
     'DIS', 'NFLX', 'AMD', 'CRM', 'ORCL', 'INTC', 'BA', 'GS', 'MS', 'UNH'];
 
   const events: EarningsEvent[] = [];
   const today = new Date();
 
-  // Try to get earnings dates from Yahoo Finance quote data
+  // Use yahoo-finance2 to get earnings dates
   const batchSize = 5;
   for (let i = 0; i < majorTickers.length; i += batchSize) {
     const batch = majorTickers.slice(i, i + batchSize);
     try {
-      const tickers = batch.join(',');
-      const { yahooFetch, YF_BASE } = await import('./yahoo');
-      const res = await yahooFetch(
-        `${YF_BASE}/v7/finance/quote?symbols=${tickers}&fields=earningsTimestamp,earningsTimestampStart,earningsTimestampEnd,epsTrailingTwelveMonths,epsForward`,
-        { revalidate: 3600 }
-      );
-      if (!res.ok) continue;
-      const data = await res.json();
-      const quotes = data.quoteResponse?.result || [];
+      const { yf } = await import('./yahoo');
+      const quotes = await yf.quote(batch);
+      const quoteArr = Array.isArray(quotes) ? quotes : [quotes];
 
-      for (const q of quotes) {
-        const earningsTs = q.earningsTimestamp || q.earningsTimestampStart || q.earningsTimestampEnd;
-        if (!earningsTs) continue;
-        const earningsDate = new Date(earningsTs * 1000);
-        // Only include future or recent (within 7 days) earnings
-        const diffDays = (earningsDate.getTime() - today.getTime()) / (1000 * 3600 * 24);
+      for (const q of quoteArr) {
+        if (!q) continue;
+        const earningsDate = q.earningsTimestamp || q.earningsTimestampStart || q.earningsTimestampEnd;
+        if (!earningsDate) continue;
+        const ed = earningsDate instanceof Date ? earningsDate : new Date(earningsDate * 1000);
+        const diffDays = (ed.getTime() - today.getTime()) / (1000 * 3600 * 24);
         if (diffDays < -7) continue;
 
         events.push({
-          ticker: q.symbol,
-          name: q.shortName || q.longName || q.symbol,
-          date: earningsDate.toISOString().split('T')[0],
-          hour: earningsDate.getHours() < 12 ? 'bmo' : 'amc',
-          epsEstimate: q.epsForward ? parseFloat((q.epsForward / 4).toFixed(2)) : null,
+          ticker: q.symbol || '',
+          name: q.shortName || q.longName || q.symbol || '',
+          date: ed.toISOString().split('T')[0],
+          hour: ed.getHours() < 12 ? 'bmo' : 'amc',
+          epsEstimate: (q as any).epsForward ? parseFloat(((q as any).epsForward / 4).toFixed(2)) : null,
           epsActual: null,
           revenueEstimate: null,
           revenueActual: null,

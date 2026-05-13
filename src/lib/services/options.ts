@@ -52,25 +52,18 @@ export interface StrategyLeg {
 // ============ Fetch Options Chain from Yahoo Finance ============
 export async function fetchOptionsChain(ticker: string, expirationDate?: string): Promise<OptionsChain | null> {
   try {
-    const { yahooFetch, YF_BASE } = await import('./yahoo');
-    const url = expirationDate
-      ? `${YF_BASE}/v7/finance/options/${ticker}?date=${expirationDate}`
-      : `${YF_BASE}/v7/finance/options/${ticker}`;
-
-    const res = await yahooFetch(url, { revalidate: 300 });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      console.error(`[Options] Yahoo returned ${res.status} for ${ticker}: ${text.slice(0, 200)}`);
-      return null;
+    const { yf } = await import('./yahoo');
+    const opts: any = {};
+    if (expirationDate) {
+      opts.date = new Date(expirationDate);
     }
-    const data = await res.json();
-    const result = data.optionChain?.result?.[0];
-    if (!result) return null;
+
+    const result = await yf.options(ticker, opts);
+    if (!result || !result.options || result.options.length === 0) return null;
 
     const currentPrice = result.quote?.regularMarketPrice ?? 0;
-    const expirationDates = (result.expirationDates || []).map((ts: number) =>
-      new Date(ts * 1000).toISOString().split('T')[0]
+    const expirationDates = (result.expirationDates || []).map((d: Date) =>
+      d.toISOString().split('T')[0]
     );
 
     const mapContract = (c: any, type: 'call' | 'put'): OptionContract => ({
@@ -82,17 +75,19 @@ export async function fetchOptionsChain(ticker: string, expirationDate?: string)
       volume: c.volume ?? 0,
       openInterest: c.openInterest ?? 0,
       impliedVolatility: c.impliedVolatility ?? 0,
-      expiration: new Date((c.expiration ?? 0) * 1000).toISOString().split('T')[0],
+      expiration: c.expiration instanceof Date
+        ? c.expiration.toISOString().split('T')[0]
+        : new Date((c.expiration ?? 0) * 1000).toISOString().split('T')[0],
       type,
       inTheMoney: c.inTheMoney ?? false,
     });
 
-    const calls: OptionContract[] = (result.options?.[0]?.calls || []).map((c: any) => mapContract(c, 'call'));
-    const puts: OptionContract[] = (result.options?.[0]?.puts || []).map((c: any) => mapContract(c, 'put'));
+    const calls: OptionContract[] = (result.options[0]?.calls || []).map((c: any) => mapContract(c, 'call'));
+    const puts: OptionContract[] = (result.options[0]?.puts || []).map((c: any) => mapContract(c, 'put'));
 
     // Calculate approximate Greeks
-    calls.forEach(c => calculateGreeks(c, currentPrice, 0.05));
-    puts.forEach(p => calculateGreeks(p, currentPrice, 0.05));
+    calls.forEach((c: OptionContract) => calculateGreeks(c, currentPrice, 0.05));
+    puts.forEach((p: OptionContract) => calculateGreeks(p, currentPrice, 0.05));
 
     return {
       ticker: ticker.toUpperCase(),
