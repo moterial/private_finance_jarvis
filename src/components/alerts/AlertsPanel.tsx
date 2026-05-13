@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useI18n } from '@/lib/i18n/context';
 import { cn } from '@/lib/utils';
-import { Bell, Plus, Trash2, Check, AlertTriangle, TrendingUp, TrendingDown, MessageCircle } from 'lucide-react';
+import { Bell, Plus, Trash2, Check, AlertTriangle, TrendingUp, TrendingDown, MessageCircle, BellRing } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 export interface AlertRule {
@@ -62,6 +62,58 @@ export default function AlertsPanel() {
     }
     load();
   }, [supabase, locale]);
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  // Check alerts against real prices every 2 minutes
+  const triggeredRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (alerts.length === 0) return;
+    const checkAlerts = async () => {
+      const active = alerts.filter(a => a.enabled && !a.triggered);
+      if (active.length === 0) return;
+      const tickers = [...new Set(active.map(a => a.ticker))];
+      try {
+        const res = await fetch(`/api/quotes?tickers=${tickers.join(',')}`);
+        const json = await res.json();
+        if (!json.success) return;
+        const prices: Record<string, { price: number; change: number; changePercent: number }> = json.data;
+
+        for (const alert of active) {
+          const q = prices[alert.ticker];
+          if (!q || triggeredRef.current.has(alert.id)) continue;
+          let triggered = false;
+          if (alert.condition === 'price_above' && q.price >= alert.value) triggered = true;
+          if (alert.condition === 'price_below' && q.price <= alert.value) triggered = true;
+          if (alert.condition === 'change_above' && q.changePercent >= alert.value) triggered = true;
+          if (alert.condition === 'change_below' && q.changePercent <= -alert.value) triggered = true;
+
+          if (triggered) {
+            triggeredRef.current.add(alert.id);
+            // Update in DB
+            await supabase.from('alerts').update({ triggered: true, triggered_at: new Date().toISOString() }).eq('id', alert.id);
+            setAlerts(prev => prev.map(a => a.id === alert.id ? { ...a, triggered: true, triggeredAt: new Date().toISOString() } : a));
+
+            // Browser notification
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification(`🔔 Alert: ${alert.ticker}`, {
+                body: `${alert.label} — Current: $${q.price.toFixed(2)} (${q.changePercent >= 0 ? '+' : ''}${q.changePercent.toFixed(2)}%)`,
+                icon: '/icon-192.svg',
+              });
+            }
+          }
+        }
+      } catch { /* silent */ }
+    };
+    checkAlerts();
+    const interval = setInterval(checkAlerts, 2 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [alerts, supabase]);
 
   const addAlert = async () => {
     if (!formTicker.trim() || !formValue.trim()) return;

@@ -37,6 +37,9 @@ const BacktestPanel = dynamic(() => import('@/components/backtest/BacktestPanel'
 const MultiAssetPanel = dynamic(() => import('@/components/multi-asset/MultiAssetPanel'), { loading: () => <PanelSkeleton /> });
 const SentimentHeatmap = dynamic(() => import('@/components/heatmap/SentimentHeatmap'), { loading: () => <PanelSkeleton /> });
 const JournalPanel = dynamic(() => import('@/components/journal/JournalPanel'), { loading: () => <PanelSkeleton /> });
+const EconomicCalendar = dynamic(() => import('@/components/dashboard/EconomicCalendar'), { loading: () => <PanelSkeleton /> });
+const CryptoWidget = dynamic(() => import('@/components/dashboard/CryptoWidget'), { loading: () => <PanelSkeleton /> });
+const ExportPdfButton = dynamic(() => import('@/components/dashboard/ExportPdfButton'), { ssr: false });
 
 interface DashboardData {
   analysis: AnalysisReport;
@@ -553,10 +556,11 @@ export default function DashboardPage() {
                   </div>
                 );
               })()}
+              <div className="ml-auto"><ExportPdfButton /></div>
             </div>
 
             {/* ===== TAB CONTENT ===== */}
-            <div className={cn(transitioning ? '' : 'animate-content-in')}>
+            <div id="dashboard-content" className={cn(transitioning ? '' : 'animate-content-in')}>
               {/* Overview Tab */}
               {activeTab === 'overview' && (
                 <div className="space-y-6">
@@ -597,6 +601,8 @@ export default function DashboardPage() {
                     <div className="lg:col-span-3 space-y-6">
                       <AnalysisPanel report={analysis} />
                       <SentimentChart report={analysis} />
+                      <CryptoWidget />
+                      <EconomicCalendar />
                     </div>
                   </div>
                 </div>

@@ -137,3 +137,27 @@ create index if not exists idx_portfolios_user on portfolios(user_id);
 create index if not exists idx_journal_user on trade_journal(user_id);
 create index if not exists idx_alerts_user on alerts(user_id);
 create index if not exists idx_watchlist_user on watchlist(user_id);
+
+-- 6. Portfolio daily history (snapshots for performance chart)
+create table if not exists portfolio_history (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) on delete cascade not null,
+  date date not null,
+  total_value numeric not null default 0,
+  total_cost numeric not null default 0,
+  day_pnl numeric not null default 0,
+  positions_json jsonb default '[]'::jsonb,
+  created_at timestamptz default now(),
+  unique(user_id, date)
+);
+
+alter table portfolio_history enable row level security;
+
+create policy "Users can view own history"
+  on portfolio_history for select using (auth.uid() = user_id);
+create policy "Users can insert own history"
+  on portfolio_history for insert with check (auth.uid() = user_id);
+create policy "Users can update own history"
+  on portfolio_history for update using (auth.uid() = user_id);
+
+create index if not exists idx_portfolio_history_user_date on portfolio_history(user_id, date desc);

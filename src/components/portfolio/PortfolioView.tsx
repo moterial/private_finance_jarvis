@@ -6,6 +6,8 @@ import { usePortfolio } from '@/lib/portfolio/store';
 import { cn, formatPrice, formatPercent } from '@/lib/utils';
 import AddStockModal from './AddStockModal';
 import StressTestPanel from './StressTestPanel';
+import PortfolioChart from './PortfolioChart';
+import { createClient } from '@/lib/supabase/client';
 import {
   Plus, Search, Briefcase, TrendingUp, TrendingDown,
   FileText, Trash2, Edit3, DollarSign, PieChart,
@@ -60,6 +62,35 @@ export default function PortfolioView() {
     const interval = setInterval(fetchPrices, 2 * 60 * 1000);
     return () => clearInterval(interval);
   }, [fetchPrices]);
+
+  // Auto-save daily portfolio snapshot
+  useEffect(() => {
+    if (portfolio.positions.length === 0) return;
+    const saveSnapshot = async () => {
+      const sb = createClient();
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) return;
+      const tv = portfolio.positions.reduce((s, p) => {
+        const lp = livePrices[p.ticker];
+        return s + (lp ? lp.price * p.shares : p.avgCost * p.shares);
+      }, 0);
+      const tc = portfolio.positions.reduce((s, p) => s + p.avgCost * p.shares, 0);
+      const dp = portfolio.positions.reduce((s, p) => {
+        const lp = livePrices[p.ticker];
+        return s + (lp ? lp.change * p.shares : 0);
+      }, 0);
+      try {
+        await fetch('/api/portfolio-history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ totalValue: tv, totalCost: tc, dayPnl: dp }),
+        });
+      } catch { /* silent */ }
+    };
+    // Save once after prices load (debounce)
+    const timer = setTimeout(saveSnapshot, 5000);
+    return () => clearTimeout(timer);
+  }, [livePrices, portfolio.positions]);
 
   // Search results
   const searchResults = searchQuery.length > 0
@@ -116,6 +147,9 @@ export default function PortfolioView() {
           <div className="text-xl font-bold font-mono text-jarvis-white mt-1">{portfolio.positions.length}</div>
         </div>
       </div>
+
+      {/* Portfolio Performance Chart */}
+      <PortfolioChart />
 
       {/* Search bar */}
       <div className="relative">
