@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useI18n } from '@/lib/i18n/context';
 import { cn } from '@/lib/utils';
 import { Bell, Plus, Trash2, Check, AlertTriangle, TrendingUp, TrendingDown, MessageCircle } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 
 export interface AlertRule {
   id: string;
@@ -15,22 +16,6 @@ export interface AlertRule {
   triggered: boolean;
   triggeredAt?: string;
   createdAt: string;
-}
-
-const STORAGE_KEY = 'jarvis-alerts';
-
-function loadAlerts(): AlertRule[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch { return []; }
-}
-
-function saveAlerts(alerts: AlertRule[]) {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(alerts));
-  }
 }
 
 const CONDITION_LABELS: Record<string, { en: string; zh: string; icon: typeof TrendingUp }> = {
@@ -48,45 +33,80 @@ export default function AlertsPanel() {
   const [formTicker, setFormTicker] = useState('');
   const [formCondition, setFormCondition] = useState<AlertRule['condition']>('price_above');
   const [formValue, setFormValue] = useState('');
+  const supabase = createClient();
 
   useEffect(() => {
-    setAlerts(loadAlerts());
-  }, []);
+    async function load() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('alerts')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (data) {
+        setAlerts(data.map(r => {
+          const condLabel = CONDITION_LABELS[r.condition];
+          return {
+            id: r.id,
+            ticker: r.ticker,
+            condition: r.condition,
+            value: Number(r.value),
+            label: `${r.ticker} ${condLabel?.[locale === 'zh' ? 'zh' : 'en'] || r.condition} ${r.value}`,
+            enabled: r.enabled,
+            triggered: r.triggered,
+            createdAt: r.created_at,
+          };
+        }));
+      }
+    }
+    load();
+  }, [supabase, locale]);
 
-  const persist = useCallback((updater: (prev: AlertRule[]) => AlertRule[]) => {
-    setAlerts(prev => {
-      const next = updater(prev);
-      saveAlerts(next);
-      return next;
-    });
-  }, []);
-
-  const addAlert = () => {
+  const addAlert = async () => {
     if (!formTicker.trim() || !formValue.trim()) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
     const condLabel = CONDITION_LABELS[formCondition];
     const label = `${formTicker.toUpperCase()} ${condLabel[locale === 'zh' ? 'zh' : 'en']} ${formValue}`;
-    const newAlert: AlertRule = {
-      id: Date.now().toString(),
+
+    const { data, error } = await supabase.from('alerts').insert({
+      user_id: user.id,
       ticker: formTicker.toUpperCase(),
       condition: formCondition,
       value: parseFloat(formValue),
-      label,
       enabled: true,
       triggered: false,
-      createdAt: new Date().toISOString(),
-    };
-    persist(prev => [...prev, newAlert]);
+    }).select().single();
+
+    if (!error && data) {
+      setAlerts(prev => [{
+        id: data.id,
+        ticker: data.ticker,
+        condition: data.condition,
+        value: Number(data.value),
+        label,
+        enabled: true,
+        triggered: false,
+        createdAt: data.created_at,
+      }, ...prev]);
+    }
     setFormTicker('');
     setFormValue('');
     setShowForm(false);
   };
 
-  const removeAlert = (id: string) => {
-    persist(prev => prev.filter(a => a.id !== id));
+  const removeAlert = async (id: string) => {
+    await supabase.from('alerts').delete().eq('id', id);
+    setAlerts(prev => prev.filter(a => a.id !== id));
   };
 
-  const toggleAlert = (id: string) => {
-    persist(prev => prev.map(a => a.id === id ? { ...a, enabled: !a.enabled } : a));
+  const toggleAlert = async (id: string) => {
+    const alert = alerts.find(a => a.id === id);
+    if (!alert) return;
+    await supabase.from('alerts').update({ enabled: !alert.enabled }).eq('id', id);
+    setAlerts(prev => prev.map(a => a.id === id ? { ...a, enabled: !a.enabled } : a));
   };
 
   const activeAlerts = alerts.filter(a => a.enabled && !a.triggered);

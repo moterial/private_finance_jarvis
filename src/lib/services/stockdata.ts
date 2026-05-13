@@ -1,10 +1,9 @@
 import { CandleData } from '../types/extended';
+import { yahooFetch, YF_BASE } from './yahoo';
 
 /**
  * Stock data service: Finnhub (if key available) → Yahoo Finance (free fallback).
  */
-
-const YF_BASE = 'https://query1.finance.yahoo.com';
 const FH_BASE = 'https://finnhub.io/api/v1';
 
 function getFinnhubKey(): string | null {
@@ -62,9 +61,9 @@ async function getQuoteFinnhub(ticker: string): Promise<StockQuote | null> {
 
 async function getQuoteYahoo(ticker: string): Promise<StockQuote | null> {
   try {
-    const res = await fetch(
+    const res = await yahooFetch(
       `${YF_BASE}/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`,
-      { headers: { 'User-Agent': 'JarvisFinance/1.0' }, next: { revalidate: 60 } }
+      { revalidate: 60 }
     );
     if (!res.ok) return null;
     const data = await res.json();
@@ -157,9 +156,9 @@ async function getCandlesYahoo(ticker: string, days: number, interval: string = 
     else if (days <= 365) range = '1y';
     else range = '2y';
 
-    const res = await fetch(
+    const res = await yahooFetch(
       `${YF_BASE}/v8/finance/chart/${encodeURIComponent(ticker)}?interval=${yahooInterval}&range=${range}`,
-      { headers: { 'User-Agent': 'JarvisFinance/1.0' }, next: { revalidate: 300 } }
+      { revalidate: 300 }
     );
 
     if (!res.ok) return null;
@@ -372,9 +371,9 @@ export interface CompanyProfile {
 
 export async function getCompanyProfile(ticker: string): Promise<CompanyProfile | null> {
   try {
-    const res = await fetch(
+    const res = await yahooFetch(
       `${YF_BASE}/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`,
-      { headers: { 'User-Agent': 'JarvisFinance/1.0' }, next: { revalidate: 3600 } }
+      { revalidate: 3600 }
     );
 
     if (!res.ok) return null;

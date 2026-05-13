@@ -52,14 +52,12 @@ export interface StrategyLeg {
 // ============ Fetch Options Chain from Yahoo Finance ============
 export async function fetchOptionsChain(ticker: string, expirationDate?: string): Promise<OptionsChain | null> {
   try {
+    const { yahooFetch, YF_BASE } = await import('./yahoo');
     const url = expirationDate
-      ? `https://query1.finance.yahoo.com/v7/finance/options/${ticker}?date=${expirationDate}`
-      : `https://query1.finance.yahoo.com/v7/finance/options/${ticker}`;
+      ? `${YF_BASE}/v7/finance/options/${ticker}?date=${expirationDate}`
+      : `${YF_BASE}/v7/finance/options/${ticker}`;
 
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      next: { revalidate: 300 },
-    });
+    const res = await yahooFetch(url, { revalidate: 300 });
 
     if (!res.ok) return null;
     const data = await res.json();

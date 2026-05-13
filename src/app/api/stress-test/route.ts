@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { chatJSON, getLanguageInstruction } from '@/lib/services/ai';
+import { withCache, cacheKey } from '@/lib/cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,7 +66,12 @@ ${posStr}
 Total positions: ${positions.length}
 Stress test this portfolio against 5 extreme scenarios. Be specific about which positions are most/least affected and provide concrete hedging suggestions.`;
 
-    const result = await chatJSON<{ scenarios: StressScenario[] }>(systemPrompt, userPrompt, 2000);
+    const posKey = positions.map((p: any) => p.ticker).sort().join(',');
+    const result = await withCache(
+      cacheKey('stress', posKey, locale),
+      () => chatJSON<{ scenarios: StressScenario[] }>(systemPrompt, userPrompt, 2000),
+      15 * 60 * 1000,
+    );
 
     return NextResponse.json({
       success: true,

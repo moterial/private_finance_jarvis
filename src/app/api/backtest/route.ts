@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { chatJSON, getLanguageInstruction } from '@/lib/services/ai';
+import { yahooFetch, YF_BASE } from '@/lib/services/yahoo';
+import { withCache, cacheKey } from '@/lib/cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,9 +20,8 @@ export async function POST(request: NextRequest) {
     const periodMap: Record<string, string> = { '3mo': '3mo', '6mo': '6mo', '1y': '1y', '2y': '2y' };
     const range = periodMap[period] || '6mo';
 
-    const res = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=${range}&interval=1d`,
-      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+    const res = await yahooFetch(
+      `${YF_BASE}/v8/finance/chart/${ticker}?range=${range}&interval=1d`
     );
 
     let historicalPrices: { date: string; close: number }[] = [];
@@ -82,7 +83,11 @@ ${pricesSummary}
 
 Simulate this strategy with realistic entries and exits. Calculate all performance metrics accurately.`;
 
-    const result = await chatJSON<any>(systemPrompt, userPrompt, 1500);
+    const result = await withCache(
+      cacheKey('backtest', ticker, strategy, period, locale),
+      () => chatJSON<any>(systemPrompt, userPrompt, 1500),
+      15 * 60 * 1000,
+    );
 
     return NextResponse.json({
       success: true,

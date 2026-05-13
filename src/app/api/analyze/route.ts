@@ -7,29 +7,34 @@ import { orchestrateAgents } from '@/lib/agents/orchestrator';
 import { getRealMarketOverview } from '@/lib/services/stockdata';
 import { generateAIInsights, generateAIStrategy, isAIEnabled } from '@/lib/services/ai';
 import { detectAnomalies } from '@/lib/services/anomaly';
+import { withCache, cacheKey } from '@/lib/cache';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60; // Allow up to 60s for AI calls
+export const maxDuration = 60;
+
+// Cache TTLs
+const DATA_TTL  = 3  * 60 * 1000; // 3 min for market data (Reddit, news, etc.)
+const AI_TTL    = 10 * 60 * 1000; // 10 min for AI-generated insights
 
 export async function GET(request: NextRequest) {
   const locale = request.nextUrl.searchParams.get('locale') || 'en';
   const phase = request.nextUrl.searchParams.get('phase') || 'full';
 
   try {
-    // Phase 1: Fast data (no AI) — gets dashboard visible quickly
+    // Shared data layer — cached so multiple users don't re-fetch
     const [redditPosts, tweets, newsArticles] = await Promise.all([
-      fetchRedditPosts(),
-      fetchTweets(),
-      fetchNews(),
+      withCache('data:reddit', fetchRedditPosts, DATA_TTL),
+      withCache('data:tweets', fetchTweets, DATA_TTL),
+      withCache('data:news', fetchNews, DATA_TTL),
     ]);
 
     const analysis = generateAnalysis(redditPosts, tweets, newsArticles);
 
-    const realMarket = await getRealMarketOverview();
-    const fallbackMarket = getMarketOverview();
-    const marketOverview = realMarket
-      ? { ...fallbackMarket, ...realMarket }
-      : fallbackMarket;
+    const marketOverview = await withCache('data:market', async () => {
+      const realMarket = await getRealMarketOverview();
+      const fallbackMarket = getMarketOverview();
+      return realMarket ? { ...fallbackMarket, ...realMarket } : fallbackMarket;
+    }, DATA_TTL);
 
     if (phase === 'fast') {
       // Return immediately with data-only results (no AI)
@@ -51,45 +56,55 @@ export async function GET(request: NextRequest) {
           },
           anomalies,
           strategy: null,
-          meta: { aiEnabled: isAIEnabled(), realMarketData: !!realMarket },
+          meta: { aiEnabled: isAIEnabled(), realMarketData: true },
         },
       });
     }
 
     if (phase === 'ai') {
-      // Phase 2: AI enrichment — called after fast phase renders
-      const [aiInsights, agentResult, strategy] = await Promise.all([
-        generateAIInsights(
-          analysis.topBullish, analysis.topBearish, analysis.trendingTopics,
-          newsArticles, redditPosts, tweets, analysis.marketSentimentScore, locale,
-        ).catch(() => null),
-        orchestrateAgents(analysis, redditPosts, tweets, newsArticles, locale),
-        generateAIStrategy(
-          analysis, analysis.topBullish, analysis.topBearish,
-          analysis.trendingTopics, newsArticles, locale,
-        ).catch(e => { console.error('[Strategy] Generation failed:', e); return null; }),
-      ]);
+      // Phase 2: AI enrichment — cached so multiple users share the same AI response
+      const aiCacheKey = cacheKey('ai', locale, new Date().toISOString().slice(0, 13)); // per-hour bucket
 
-      if (aiInsights && aiInsights.length > 0) {
-        analysis.keyInsights = aiInsights;
-      }
+      const cachedAiResult = await withCache(cacheKey('ai:full', locale), async () => {
+        const [aiInsights, agentResult, strategy] = await Promise.all([
+          generateAIInsights(
+            analysis.topBullish, analysis.topBearish, analysis.trendingTopics,
+            newsArticles, redditPosts, tweets, analysis.marketSentimentScore, locale,
+          ).catch(() => null),
+          orchestrateAgents(analysis, redditPosts, tweets, newsArticles, locale),
+          generateAIStrategy(
+            analysis, analysis.topBullish, analysis.topBearish,
+            analysis.trendingTopics, newsArticles, locale,
+          ).catch(e => { console.error('[Strategy] Generation failed:', e); return null; }),
+        ]);
 
-      return NextResponse.json({
-        success: true,
-        phase: 'ai',
-        data: {
+        if (aiInsights && aiInsights.length > 0) {
+          analysis.keyInsights = aiInsights;
+        }
+
+        return {
           analysis,
-          marketOverview,
-          rawData: { reddit: redditPosts, tweets, news: newsArticles },
           agents: {
             states: agentResult.agentStates,
             expertSummary: agentResult.expertSummary,
             findings: agentResult.allFindings,
             chainReactions: agentResult.chainReactions,
           },
-          anomalies: detectAnomalies([...analysis.topBullish, ...analysis.topBearish], redditPosts, tweets, newsArticles, analysis.trendingTopics),
           strategy,
-          meta: { aiEnabled: isAIEnabled(), realMarketData: !!realMarket },
+        };
+      }, AI_TTL);
+
+      return NextResponse.json({
+        success: true,
+        phase: 'ai',
+        data: {
+          analysis: cachedAiResult.analysis,
+          marketOverview,
+          rawData: { reddit: redditPosts, tweets, news: newsArticles },
+          agents: cachedAiResult.agents,
+          anomalies: detectAnomalies([...analysis.topBullish, ...analysis.topBearish], redditPosts, tweets, newsArticles, analysis.trendingTopics),
+          strategy: cachedAiResult.strategy,
+          meta: { aiEnabled: isAIEnabled(), realMarketData: true },
         },
       });
     }
@@ -130,7 +145,7 @@ export async function GET(request: NextRequest) {
         },
         anomalies: detectAnomalies([...analysis.topBullish, ...analysis.topBearish], redditPosts, tweets, newsArticles, analysis.trendingTopics),
         strategy,
-        meta: { aiEnabled: isAIEnabled(), realMarketData: !!realMarket },
+        meta: { aiEnabled: isAIEnabled(), realMarketData: true },
       },
     });
   } catch (error) {

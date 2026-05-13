@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { yahooFetch, YF_BASE } from '@/lib/services/yahoo';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,9 +55,9 @@ export async function GET() {
 
   try {
     const allSymbols = [...forexSymbols, ...commoditySymbols].join(',');
-    const res = await fetch(
-      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${allSymbols}`,
-      { headers: { 'User-Agent': 'Mozilla/5.0' }, next: { revalidate: 300 } }
+    const res = await yahooFetch(
+      `${YF_BASE}/v7/finance/quote?symbols=${allSymbols}`,
+      { revalidate: 300 }
     );
     if (res.ok) {
       const data = await res.json();

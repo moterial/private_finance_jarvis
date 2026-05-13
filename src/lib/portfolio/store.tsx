@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { Portfolio, PortfolioPosition } from '../types/extended';
+import { createClient } from '../supabase/client';
 
 interface PortfolioContextType {
   portfolio: Portfolio;
@@ -16,87 +17,130 @@ interface PortfolioContextType {
 
 const PortfolioContext = createContext<PortfolioContextType | null>(null);
 
-const STORAGE_KEY = 'jarvis-portfolio';
-
-function loadPortfolio(): Portfolio {
-  if (typeof window === 'undefined') return { positions: [], watchlist: [], lastUpdated: new Date().toISOString() };
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return JSON.parse(stored);
-  } catch {}
-  return { positions: [], watchlist: [], lastUpdated: new Date().toISOString() };
-}
-
-function savePortfolio(portfolio: Portfolio) {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(portfolio));
-  }
-}
+const EMPTY: Portfolio = { positions: [], watchlist: [], lastUpdated: new Date().toISOString() };
 
 export function PortfolioProvider({ children }: { children: ReactNode }) {
-  const [portfolio, setPortfolio] = useState<Portfolio>(loadPortfolio);
+  const [portfolio, setPortfolio] = useState<Portfolio>(EMPTY);
+  const supabase = createClient();
 
+  // Load portfolio from Supabase on mount
   useEffect(() => {
-    setPortfolio(loadPortfolio());
-  }, []);
+    let cancelled = false;
+    async function load() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
 
-  const persist = useCallback((updater: (prev: Portfolio) => Portfolio) => {
-    setPortfolio(prev => {
-      const next = updater(prev);
-      next.lastUpdated = new Date().toISOString();
-      savePortfolio(next);
-      return next;
-    });
-  }, []);
+      const [posRes, wlRes] = await Promise.all([
+        supabase.from('portfolios').select('*').eq('user_id', user.id).order('added_at', { ascending: true }),
+        supabase.from('watchlist').select('ticker').eq('user_id', user.id),
+      ]);
 
-  const addPosition = useCallback((pos: Omit<PortfolioPosition, 'addedAt'>) => {
-    persist(prev => {
-      if (prev.positions.some(p => p.ticker === pos.ticker)) return prev;
-      return {
-        ...prev,
-        positions: [...prev.positions, { ...pos, addedAt: new Date().toISOString() }],
-      };
-    });
-  }, [persist]);
+      if (cancelled) return;
 
-  const removePosition = useCallback((ticker: string) => {
-    persist(prev => ({
+      const positions: PortfolioPosition[] = (posRes.data || []).map(r => ({
+        ticker: r.ticker,
+        name: r.ticker, // name is resolved client-side
+        shares: Number(r.shares),
+        avgCost: Number(r.avg_cost),
+        addedAt: r.added_at,
+        notes: r.notes || '',
+        sector: '',
+      }));
+
+      const watchlist = (wlRes.data || []).map(r => r.ticker);
+
+      setPortfolio({ positions, watchlist, lastUpdated: new Date().toISOString() });
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [supabase]);
+
+  const addPosition = useCallback(async (pos: Omit<PortfolioPosition, 'addedAt'>) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase.from('portfolios').upsert({
+      user_id: user.id,
+      ticker: pos.ticker,
+      shares: pos.shares,
+      avg_cost: pos.avgCost,
+      notes: pos.notes || '',
+    }, { onConflict: 'user_id,ticker' });
+
+    if (!error) {
+      setPortfolio(prev => {
+        if (prev.positions.some(p => p.ticker === pos.ticker)) return prev;
+        return {
+          ...prev,
+          positions: [...prev.positions, { ...pos, addedAt: new Date().toISOString() }],
+          lastUpdated: new Date().toISOString(),
+        };
+      });
+    }
+  }, [supabase]);
+
+  const removePosition = useCallback(async (ticker: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    await supabase.from('portfolios').delete().eq('user_id', user.id).eq('ticker', ticker);
+    setPortfolio(prev => ({
       ...prev,
       positions: prev.positions.filter(p => p.ticker !== ticker),
+      lastUpdated: new Date().toISOString(),
     }));
-  }, [persist]);
+  }, [supabase]);
 
-  const updateNotes = useCallback((ticker: string, notes: string) => {
-    persist(prev => ({
+  const updateNotes = useCallback(async (ticker: string, notes: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    await supabase.from('portfolios').update({ notes, updated_at: new Date().toISOString() }).eq('user_id', user.id).eq('ticker', ticker);
+    setPortfolio(prev => ({
       ...prev,
       positions: prev.positions.map(p => p.ticker === ticker ? { ...p, notes } : p),
+      lastUpdated: new Date().toISOString(),
     }));
-  }, [persist]);
+  }, [supabase]);
 
-  const updateShares = useCallback((ticker: string, shares: number, avgCost: number) => {
-    persist(prev => ({
+  const updateShares = useCallback(async (ticker: string, shares: number, avgCost: number) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    await supabase.from('portfolios').update({ shares, avg_cost: avgCost, updated_at: new Date().toISOString() }).eq('user_id', user.id).eq('ticker', ticker);
+    setPortfolio(prev => ({
       ...prev,
       positions: prev.positions.map(p => p.ticker === ticker ? { ...p, shares, avgCost } : p),
+      lastUpdated: new Date().toISOString(),
     }));
-  }, [persist]);
+  }, [supabase]);
 
   const isInPortfolio = useCallback((ticker: string) => {
     return portfolio.positions.some(p => p.ticker === ticker);
   }, [portfolio.positions]);
 
-  const addToWatchlist = useCallback((ticker: string) => {
-    persist(prev => {
-      if (prev.watchlist.includes(ticker)) return prev;
-      return { ...prev, watchlist: [...prev.watchlist, ticker] };
-    });
-  }, [persist]);
+  const addToWatchlist = useCallback(async (ticker: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-  const removeFromWatchlist = useCallback((ticker: string) => {
-    persist(prev => ({
+    await supabase.from('watchlist').upsert({ user_id: user.id, ticker }, { onConflict: 'user_id,ticker' });
+    setPortfolio(prev => {
+      if (prev.watchlist.includes(ticker)) return prev;
+      return { ...prev, watchlist: [...prev.watchlist, ticker], lastUpdated: new Date().toISOString() };
+    });
+  }, [supabase]);
+
+  const removeFromWatchlist = useCallback(async (ticker: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    await supabase.from('watchlist').delete().eq('user_id', user.id).eq('ticker', ticker);
+    setPortfolio(prev => ({
       ...prev,
       watchlist: prev.watchlist.filter(t => t !== ticker),
+      lastUpdated: new Date().toISOString(),
     }));
-  }, [persist]);
+  }, [supabase]);
 
   return (
     <PortfolioContext.Provider value={{

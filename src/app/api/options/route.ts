@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { fetchOptionsChain, buildStrategies, calculatePutCallRatio } from '@/lib/services/options';
 import { chatJSON } from '@/lib/services/ai';
 import { getLanguageInstruction } from '@/lib/services/ai';
+import { withCache, cacheKey } from '@/lib/cache';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,10 +24,13 @@ export async function GET(request: NextRequest) {
     const strategies = buildStrategies(chain);
     const putCallRatio = calculatePutCallRatio(chain);
 
-    // AI strategy recommendation (non-blocking — return data even if AI fails)
+    // AI strategy recommendation — cached per ticker (10 min)
     let aiRecommendation: string | null = null;
     try {
-      const systemPrompt = `You are JARVIS — an options strategist who finds asymmetric trades.
+      aiRecommendation = await withCache(
+        cacheKey('options:ai', ticker, locale),
+        async () => {
+          const systemPrompt = `You are JARVIS — an options strategist who finds asymmetric trades.
 Analyze the options data and recommend the BEST strategy. Be specific:
 - Why this strategy over others given current IV, skew, and market conditions
 - Exact strikes and expiration to use
@@ -34,8 +38,8 @@ Analyze the options data and recommend the BEST strategy. Be specific:
 - What catalyst or event makes this trade attractive RIGHT NOW
 Return JSON: { "recommendation": "3-4 sentences with specific strategy, strikes, and reasoning" }${getLanguageInstruction(locale)}`;
 
-      const today = new Date().toISOString().split('T')[0];
-      const userPrompt = `TODAY: ${today}
+          const today = new Date().toISOString().split('T')[0];
+          const userPrompt = `TODAY: ${today}
 ${ticker} @ $${chain.currentPrice}
 Put/Call Volume Ratio: ${putCallRatio.volumeRatio} (${putCallRatio.signal})
 Put/Call OI Ratio: ${putCallRatio.oiRatio}
@@ -43,8 +47,11 @@ Available strategies: ${strategies.map(s => `${s.name}(${s.type}, maxProfit:${s.
 ATM IV: ${chain.calls.find(c => c.inTheMoney === false)?.impliedVolatility?.toFixed(2) || 'N/A'}
 Nearest expiration: ${chain.expirationDates[0] || 'N/A'}`;
 
-      const result = await chatJSON<{ recommendation: string }>(systemPrompt, userPrompt, 400);
-      aiRecommendation = result?.recommendation ?? null;
+          const result = await chatJSON<{ recommendation: string }>(systemPrompt, userPrompt, 400);
+          return result?.recommendation ?? null;
+        },
+        10 * 60 * 1000,
+      );
     } catch {
       // AI is optional
     }

@@ -62,9 +62,10 @@ async function fetchEarningsFromYahoo(): Promise<EarningsEvent[]> {
     const batch = majorTickers.slice(i, i + batchSize);
     try {
       const tickers = batch.join(',');
-      const res = await fetch(
-        `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${tickers}&fields=earningsTimestamp,earningsTimestampStart,earningsTimestampEnd,epsTrailingTwelveMonths,epsForward`,
-        { headers: { 'User-Agent': 'Mozilla/5.0' }, next: { revalidate: 3600 } }
+      const { yahooFetch, YF_BASE } = await import('./yahoo');
+      const res = await yahooFetch(
+        `${YF_BASE}/v7/finance/quote?symbols=${tickers}&fields=earningsTimestamp,earningsTimestampStart,earningsTimestampEnd,epsTrailingTwelveMonths,epsForward`,
+        { revalidate: 3600 }
       );
       if (!res.ok) continue;
       const data = await res.json();

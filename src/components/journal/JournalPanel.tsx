@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useI18n } from '@/lib/i18n/context';
 import { cn } from '@/lib/utils';
 import { Loader2, BookOpen, Plus, Trash2, TrendingUp, TrendingDown, Brain, Target } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 
 export interface TradeEntry {
   id: string;
@@ -17,22 +18,6 @@ export interface TradeEntry {
   outcome?: 'win' | 'loss' | 'open';
   pnl?: number;
   lessons?: string;
-}
-
-const STORAGE_KEY = 'jarvis-journal';
-
-function loadJournal(): TradeEntry[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch { return []; }
-}
-
-function saveJournal(entries: TradeEntry[]) {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-  }
 }
 
 const EMOTIONS = [
@@ -56,6 +41,7 @@ export default function JournalPanel() {
   const [showForm, setShowForm] = useState(false);
   const [aiCoaching, setAiCoaching] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const supabase = createClient();
 
   // Form state
   const [fTicker, setFTicker] = useState('');
@@ -68,21 +54,39 @@ export default function JournalPanel() {
   const [fPnl, setFPnl] = useState('');
 
   useEffect(() => {
-    setEntries(loadJournal());
-  }, []);
+    async function load() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('trade_journal')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+      if (data) {
+        setEntries(data.map(r => ({
+          id: r.id,
+          ticker: r.ticker,
+          action: r.action,
+          price: Number(r.price),
+          shares: Number(r.shares),
+          date: r.date,
+          reasoning: r.reasoning || '',
+          emotion: r.emotion || 'neutral',
+          outcome: r.outcome || 'open',
+          pnl: r.pnl ? Number(r.pnl) : undefined,
+        })));
+      }
+    }
+    load();
+  }, [supabase]);
 
-  const persist = useCallback((updater: (prev: TradeEntry[]) => TradeEntry[]) => {
-    setEntries(prev => {
-      const next = updater(prev);
-      saveJournal(next);
-      return next;
-    });
-  }, []);
-
-  const addEntry = () => {
+  const addEntry = async () => {
     if (!fTicker.trim() || !fPrice.trim()) return;
-    const entry: TradeEntry = {
-      id: Date.now().toString(),
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const row = {
+      user_id: user.id,
       ticker: fTicker.toUpperCase(),
       action: fAction,
       price: parseFloat(fPrice),
@@ -91,15 +95,32 @@ export default function JournalPanel() {
       reasoning: fReasoning,
       emotion: fEmotion,
       outcome: fOutcome,
-      pnl: fPnl ? parseFloat(fPnl) : undefined,
+      pnl: fPnl ? parseFloat(fPnl) : 0,
     };
-    persist(prev => [entry, ...prev]);
+
+    const { data, error } = await supabase.from('trade_journal').insert(row).select().single();
+    if (!error && data) {
+      const entry: TradeEntry = {
+        id: data.id,
+        ticker: data.ticker,
+        action: data.action,
+        price: Number(data.price),
+        shares: Number(data.shares),
+        date: data.date,
+        reasoning: data.reasoning || '',
+        emotion: data.emotion || 'neutral',
+        outcome: data.outcome || 'open',
+        pnl: data.pnl ? Number(data.pnl) : undefined,
+      };
+      setEntries(prev => [entry, ...prev]);
+    }
     setFTicker(''); setFPrice(''); setFShares(''); setFReasoning(''); setFPnl('');
     setShowForm(false);
   };
 
-  const removeEntry = (id: string) => {
-    persist(prev => prev.filter(e => e.id !== id));
+  const removeEntry = async (id: string) => {
+    await supabase.from('trade_journal').delete().eq('id', id);
+    setEntries(prev => prev.filter(e => e.id !== id));
   };
 
   const getAICoaching = async () => {
