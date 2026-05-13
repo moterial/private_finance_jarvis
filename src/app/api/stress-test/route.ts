@@ -70,7 +70,7 @@ Stress test this portfolio against 5 extreme scenarios. Be specific about which 
     const result = await withCache(
       cacheKey('stress', posKey, locale),
       () => chatJSON<{ scenarios: StressScenario[] }>(systemPrompt, userPrompt, 2000),
-      15 * 60 * 1000,
+      30 * 60 * 1000,
     );
 
     return NextResponse.json({

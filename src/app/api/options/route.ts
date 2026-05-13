@@ -50,7 +50,7 @@ Nearest expiration: ${chain.expirationDates[0] || 'N/A'}`;
           const result = await chatJSON<{ recommendation: string }>(systemPrompt, userPrompt, 400);
           return result?.recommendation ?? null;
         },
-        10 * 60 * 1000,
+        20 * 60 * 1000,
       );
     } catch {
       // AI is optional

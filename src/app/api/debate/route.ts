@@ -63,7 +63,7 @@ Keep it under 150 words. Be decisive.${langInst}`,
           verdict: verdict || 'Unable to generate verdict',
         };
       },
-      15 * 60 * 1000,
+      30 * 60 * 1000,
     );
 
     return NextResponse.json({ success: true, data: result });

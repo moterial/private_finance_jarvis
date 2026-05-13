@@ -13,8 +13,8 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 // Cache TTLs
-const DATA_TTL  = 3  * 60 * 1000; // 3 min for market data (Reddit, news, etc.)
-const AI_TTL    = 10 * 60 * 1000; // 10 min for AI-generated insights
+const DATA_TTL  = 10 * 60 * 1000; // 10 min for market data (Reddit, news, etc.)
+const AI_TTL    = 30 * 60 * 1000; // 30 min for AI-generated insights
 
 export async function GET(request: NextRequest) {
   const locale = request.nextUrl.searchParams.get('locale') || 'en';
@@ -37,17 +37,12 @@ export async function GET(request: NextRequest) {
     }, DATA_TTL);
 
     if (phase === 'fast') {
-      // Return immediately with data-only results (no AI)
-      const quickAgentResult = await orchestrateAgents(analysis, redditPosts, tweets, newsArticles, locale);
-      const allSignals = [...analysis.topBullish, ...analysis.topBearish];
-      const anomalies = detectAnomalies(allSignals, redditPosts, tweets, newsArticles, analysis.trendingTopics);
-      return NextResponse.json({
-        success: true,
-        phase: 'fast',
-        data: {
-          analysis,
-          marketOverview,
-          rawData: { reddit: redditPosts, tweets, news: newsArticles },
+      // Cached fast response — agents + anomaly detection shared across users
+      const fastResult = await withCache(cacheKey('fast', locale), async () => {
+        const quickAgentResult = await orchestrateAgents(analysis, redditPosts, tweets, newsArticles, locale);
+        const allSignals = [...analysis.topBullish, ...analysis.topBearish];
+        const anomalies = detectAnomalies(allSignals, redditPosts, tweets, newsArticles, analysis.trendingTopics);
+        return {
           agents: {
             states: quickAgentResult.agentStates,
             expertSummary: quickAgentResult.expertSummary,
@@ -55,6 +50,18 @@ export async function GET(request: NextRequest) {
             chainReactions: quickAgentResult.chainReactions,
           },
           anomalies,
+        };
+      }, DATA_TTL);
+
+      return NextResponse.json({
+        success: true,
+        phase: 'fast',
+        data: {
+          analysis,
+          marketOverview,
+          rawData: { reddit: redditPosts, tweets, news: newsArticles },
+          agents: fastResult.agents,
+          anomalies: fastResult.anomalies,
           strategy: null,
           meta: { aiEnabled: isAIEnabled(), realMarketData: true },
         },

@@ -86,7 +86,7 @@ Simulate this strategy with realistic entries and exits. Calculate all performan
     const result = await withCache(
       cacheKey('backtest', ticker, strategy, period, locale),
       () => chatJSON<any>(systemPrompt, userPrompt, 1500),
-      15 * 60 * 1000,
+      30 * 60 * 1000,
     );
 
     return NextResponse.json({
