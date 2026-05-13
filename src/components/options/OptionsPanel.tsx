@@ -354,14 +354,20 @@ export default function OptionsPanel() {
 
                     {/* Legs */}
                     <div className="space-y-1 mb-3">
-                      {strategy.legs.filter(l => l.type === 'call' || l.type === 'put').map((leg, li) => (
+                      {strategy.legs.map((leg, li) => (
                         <div key={li} className="flex items-center gap-2 text-xs font-mono">
                           <span className={leg.action === 'buy' ? 'text-jarvis-green' : 'text-jarvis-red'}>
                             {leg.action.toUpperCase()}
                           </span>
                           <span className="text-jarvis-gray-400">{leg.type.toUpperCase()}</span>
-                          <span className="text-jarvis-white">${leg.strike}</span>
-                          <span className="text-jarvis-gray-600">@${leg.premium.toFixed(2)}</span>
+                          {leg.type === 'stock' ? (
+                            <span className="text-jarvis-white">{leg.quantity} shares @ ${leg.strike.toFixed(2)}</span>
+                          ) : (
+                            <>
+                              <span className="text-jarvis-white">${leg.strike}</span>
+                              <span className="text-jarvis-gray-600">@${leg.premium.toFixed(2)}</span>
+                            </>
+                          )}
                         </div>
                       ))}
                     </div>

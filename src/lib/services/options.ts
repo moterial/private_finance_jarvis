@@ -42,7 +42,7 @@ export interface OptionsStrategy {
 
 export interface StrategyLeg {
   action: 'buy' | 'sell';
-  type: 'call' | 'put';
+  type: 'call' | 'put' | 'stock';
   strike: number;
   premium: number;
   quantity: number;
@@ -176,14 +176,14 @@ export function buildStrategies(chain: OptionsChain): OptionsStrategy[] {
       name: 'Covered Call',
       type: 'bullish',
       legs: [
-        { action: 'buy', type: 'call', strike: price, premium: price, quantity: 100, expiration: sellCall.expiration },
+        { action: 'buy', type: 'stock', strike: price, premium: price, quantity: 100, expiration: sellCall.expiration },
         { action: 'sell', type: 'call', strike: sellCall.strike, premium, quantity: 1, expiration: sellCall.expiration },
       ],
       maxProfit: round(maxProfit),
       maxLoss: round(maxLoss),
       breakeven: [round(price - premium)],
       netDebit: round((price - premium) * 100),
-      riskRewardRatio: `1:${(maxProfit / maxLoss).toFixed(1)}`,
+      riskRewardRatio: `1:${(maxProfit / maxLoss).toFixed(2)}`,
     });
   }
 

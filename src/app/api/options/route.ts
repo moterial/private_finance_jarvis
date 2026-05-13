@@ -16,7 +16,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const chain = await fetchOptionsChain(ticker, expiration);
+    // Cache chain data per ticker+expiration for 5 min — shared across all users
+    const chain = await withCache(
+      cacheKey('options:chain', ticker, expiration || 'default'),
+      () => fetchOptionsChain(ticker!, expiration),
+      5 * 60 * 1000,
+    );
     if (!chain) {
       return NextResponse.json({ success: false, error: 'No options data available' }, { status: 404 });
     }
