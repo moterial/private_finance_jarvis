@@ -655,7 +655,7 @@ export default function DashboardPage() {
                 />
               )}
               {activeTab === 'journal' && <JournalPanel />}
-              {activeTab === 'strategy' && <StrategyPanel strategy={data.strategy} />}
+              {activeTab === 'strategy' && <StrategyPanel strategy={data.strategy} loading={aiLoading} />}
               {activeTab === 'agents' && (
                 <AgentPanel
                   agentStates={agents.states}

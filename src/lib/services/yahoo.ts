@@ -1,17 +1,63 @@
 // ============ Yahoo Finance Data Layer ============
 // Uses yahoo-finance2 package which handles crumb/cookie auth internally.
+// When YAHOO_PROXY_URL is set, routes requests through a Cloudflare Worker proxy
+// to bypass datacenter IP blocking.
 
 import YahooFinance from 'yahoo-finance2';
 
-const yf = new YahooFinance({
+const PROXY_URL = process.env.YAHOO_PROXY_URL || '';
+const PROXY_SECRET = process.env.YAHOO_PROXY_SECRET || '';
+
+/**
+ * Custom fetch that routes through proxy when YAHOO_PROXY_URL is configured.
+ * yahoo-finance2 calls this for all HTTP requests (cookie, crumb, API).
+ */
+function createProxiedFetch() {
+  if (!PROXY_URL) return undefined; // Use default fetch
+
+  return async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const targetUrl = typeof url === 'string' ? url : url instanceof URL ? url.toString() : (url as Request).url;
+    const proxyTarget = `${PROXY_URL}?url=${encodeURIComponent(targetUrl)}`;
+
+    const headers: Record<string, string> = {
+      ...(init?.headers as Record<string, string> || {}),
+    };
+    if (PROXY_SECRET) {
+      headers['X-Proxy-Secret'] = PROXY_SECRET;
+    }
+    // Forward cookies via custom header
+    if (headers['Cookie'] || headers['cookie']) {
+      headers['X-Yahoo-Cookie'] = headers['Cookie'] || headers['cookie'] || '';
+    }
+
+    const res = await globalThis.fetch(proxyTarget, {
+      ...init,
+      headers,
+      redirect: 'manual',
+    });
+
+    // If proxy returned set-cookie in custom header, we still get it
+    return res;
+  };
+}
+
+const proxyFetch = createProxiedFetch();
+
+const yfOpts: any = {
   suppressNotices: ['yahooSurvey'],
-  queue: { concurrency: 1 },  // Serialize requests to avoid 429
+  queue: { concurrency: 1 },
   fetchOptions: {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
     },
   },
-});
+};
+
+if (proxyFetch) {
+  yfOpts.fetch = proxyFetch;
+}
+
+const yf = new YahooFinance(yfOpts);
 
 export { yf };
 

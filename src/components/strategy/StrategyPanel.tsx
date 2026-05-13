@@ -19,6 +19,7 @@ interface StrategyPlan {
 
 interface StrategyPanelProps {
   strategy: StrategyPlan | null;
+  loading?: boolean;
 }
 
 const ALLOCATION_COLORS = [
@@ -41,15 +42,25 @@ const ALLOCATION_TEXT_COLORS = [
   'text-cyan-400',
 ];
 
-export default function StrategyPanel({ strategy }: StrategyPanelProps) {
+export default function StrategyPanel({ strategy, loading }: StrategyPanelProps) {
   const { t } = useI18n();
 
   if (!strategy) {
     return (
       <div className="glass-panel p-8 text-center animate-fade-in">
-        <Lightbulb className="w-10 h-10 text-jarvis-gray-600 mx-auto mb-3" />
-        <p className="text-sm text-jarvis-gray-500">{t('strategy.noData')}</p>
-        <p className="text-xs text-jarvis-gray-600 mt-1">{t('strategy.noDataHint')}</p>
+        {loading ? (
+          <>
+            <div className="w-10 h-10 border-2 border-jarvis-accent/30 border-t-jarvis-accent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-sm text-jarvis-gray-400">AI 正在生成投資策略...</p>
+            <p className="text-xs text-jarvis-gray-600 mt-1">Generating investment strategy, please wait...</p>
+          </>
+        ) : (
+          <>
+            <Lightbulb className="w-10 h-10 text-jarvis-gray-600 mx-auto mb-3" />
+            <p className="text-sm text-jarvis-gray-500">{t('strategy.noData')}</p>
+            <p className="text-xs text-jarvis-gray-600 mt-1">{t('strategy.noDataHint')}</p>
+          </>
+        )}
       </div>
     );
   }
