@@ -12,10 +12,18 @@ interface RSSFeed {
 }
 
 const RSS_FEEDS: RSSFeed[] = [
+  // ── Financial / stock-specific ──
   { url: 'https://feeds.finance.yahoo.com/rss/2.0/headline?s=AAPL,NVDA,MSFT,GOOGL,TSLA,AMD,META,AMZN,PLTR,JPM&region=US&lang=en-US', source: 'Yahoo Finance' },
   { url: 'https://news.google.com/rss/search?q=stock+market+OR+NVDA+OR+AAPL+OR+TSLA+OR+MSFT&hl=en-US&gl=US&ceid=US:en', source: 'Google News' },
   { url: 'https://feeds.marketwatch.com/marketwatch/topstories/', source: 'MarketWatch' },
   { url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114', source: 'CNBC' },
+  // ── Political / geopolitical (market-moving) ──
+  { url: 'https://news.google.com/rss/search?q=Trump+OR+president+tariff+OR+trade+deal+OR+sanctions+OR+executive+order+stock+market+OR+economy&hl=en-US&gl=US&ceid=US:en', source: 'Google News Politics' },
+  { url: 'https://news.google.com/rss/search?q=US+China+trade+OR+CEO+visit+Beijing+OR+White+House+economy+OR+Fed+rate&hl=en-US&gl=US&ceid=US:en', source: 'Google News Geopolitics' },
+  { url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000113', source: 'CNBC Politics' },
+  // ── Key figure X/social posts (via Google News) ──
+  { url: 'https://news.google.com/rss/search?q=%22Trump+said%22+OR+%22Trump+posted%22+OR+%22Truth+Social%22+market+OR+economy+OR+tariff+OR+trade&hl=en-US&gl=US&ceid=US:en', source: 'X - Trump' },
+  { url: 'https://news.google.com/rss/search?q=%22Elon+Musk%22+tweet+OR+post+OR+said+stock+OR+crypto+OR+Tesla+OR+DOGE&hl=en-US&gl=US&ceid=US:en', source: 'X - Elon Musk' },
 ];
 
 export async function fetchNews(): Promise<NewsArticle[]> {
@@ -42,7 +50,7 @@ export async function fetchNews(): Promise<NewsArticle[]> {
     new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
   );
 
-  return deduplicateArticles(sorted).slice(0, 25);
+  return deduplicateArticles(sorted).slice(0, 40);
 }
 
 async function fetchRSSFeed(feed: RSSFeed): Promise<NewsArticle[]> {
@@ -91,6 +99,7 @@ function parseRSSXml(xml: string, source: string): NewsArticle[] {
 
     const tickers = extractTickersFromNews(cleanTitle + ' ' + cleanDesc);
     const { sentiment, score } = analyzeNewsSentiment(cleanTitle + ' ' + cleanDesc);
+    const category = detectCategory(cleanTitle + ' ' + cleanDesc, source, tickers);
 
     articles.push({
       id: `rss-${source.toLowerCase().replace(/\s/g, '')}-${idx}`,
@@ -103,7 +112,7 @@ function parseRSSXml(xml: string, source: string): NewsArticle[] {
       sentiment,
       sentimentScore: score,
       tickers,
-      category: tickers.length > 0 ? 'stocks' : 'market',
+      category,
     });
 
     idx++;
@@ -129,6 +138,33 @@ function extractMediaImage(block: string): string | null {
   if (encMatch) return encMatch[1];
 
   return null;
+}
+
+// ============ Category Detection ============
+const POLITICAL_KEYWORDS = [
+  'trump', 'president', 'white house', 'congress', 'senate', 'tariff',
+  'trade war', 'trade deal', 'sanctions', 'executive order', 'biden',
+  'xi jinping', 'beijing', 'geopolitical', 'diplomatic', 'election',
+  'truth social', 'political', 'government', 'legislation', 'policy',
+  'elon musk', 'ceo visit', 'state visit',
+];
+
+function detectCategory(text: string, source: string, tickers: string[]): string {
+  const lower = text.toLowerCase();
+
+  // Political/geopolitical
+  if (source.includes('Politics') || source.includes('Geopolitics') || source.startsWith('X -')) {
+    return 'political';
+  }
+  if (POLITICAL_KEYWORDS.some(kw => lower.includes(kw))) {
+    return 'political';
+  }
+
+  // Other categories
+  if (lower.includes('earning') || lower.includes('revenue') || lower.includes('quarterly')) return 'earnings';
+  if (lower.includes('fed ') || lower.includes('interest rate') || lower.includes('inflation')) return 'macro';
+  if (tickers.length > 0) return 'stocks';
+  return 'market';
 }
 
 function deduplicateArticles(articles: NewsArticle[]): NewsArticle[] {
@@ -171,8 +207,26 @@ function extractTickersFromNews(text: string): string[] {
 
 // ============ Sentiment ============
 function analyzeNewsSentiment(text: string): { sentiment: 'bullish' | 'bearish' | 'neutral'; score: number } {
-  const bullish = ['growth', 'surge', 'rally', 'beat', 'record', 'upgrade', 'strong', 'gain', 'profit', 'revenue growth', 'outperform', 'breakthrough', 'innovation', 'soars', 'jumps', 'rises'];
-  const bearish = ['decline', 'fall', 'crash', 'miss', 'loss', 'downgrade', 'weak', 'risk', 'layoff', 'recession', 'investigation', 'lawsuit', 'fine', 'plunges', 'drops', 'slides', 'slumps'];
+  const bullish = [
+    'growth', 'surge', 'rally', 'beat', 'record', 'upgrade', 'strong', 'gain',
+    'profit', 'revenue growth', 'outperform', 'breakthrough', 'innovation',
+    'soars', 'jumps', 'rises',
+    // political / geopolitical bullish
+    'trade deal', 'deal signed', 'tariff cut', 'tariff reduction', 'tariff pause',
+    'sanctions lifted', 'trade agreement', 'open up', 'cooperation',
+    'rate cut', 'stimulus', 'infrastructure bill', 'deregulation',
+    'peace', 'ceasefire', 'diplomatic', 'partnership',
+  ];
+  const bearish = [
+    'decline', 'fall', 'crash', 'miss', 'loss', 'downgrade', 'weak', 'risk',
+    'layoff', 'recession', 'investigation', 'lawsuit', 'fine',
+    'plunges', 'drops', 'slides', 'slumps',
+    // political / geopolitical bearish
+    'tariff hike', 'new tariff', 'trade war', 'sanctions', 'ban', 'embargo',
+    'executive order restrict', 'government shutdown', 'debt ceiling',
+    'impeach', 'indictment', 'escalation', 'military strike', 'invasion',
+    'retaliation', 'blacklist', 'export control',
+  ];
 
   const lower = text.toLowerCase();
   let score = 0;

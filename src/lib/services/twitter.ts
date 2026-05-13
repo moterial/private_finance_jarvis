@@ -82,18 +82,98 @@ export async function fetchTweets(): Promise<Tweet[]> {
     }
   }
 
+  // Source 3: Key figure X posts via Google News (Trump, Elon, major CEOs)
+  const keyFigureFeeds = [
+    { url: 'https://news.google.com/rss/search?q=%22Trump+said%22+OR+%22Trump+posted%22+OR+%22Truth+Social%22+tariff+OR+market+OR+economy+OR+trade&when=1d&hl=en-US&gl=US&ceid=US:en', author: 'Trump (via news)', isVerified: true },
+    { url: 'https://news.google.com/rss/search?q=%22Elon+Musk%22+tweet+OR+post+OR+said+stock+OR+crypto+OR+Tesla+OR+DOGE+OR+xAI&when=1d&hl=en-US&gl=US&ceid=US:en', author: 'Elon Musk (via news)', isVerified: true },
+    { url: 'https://news.google.com/rss/search?q=%22Tim+Cook%22+OR+%22Satya+Nadella%22+OR+%22Jensen+Huang%22+OR+%22Mark+Zuckerberg%22+said+OR+announced&when=1d&hl=en-US&gl=US&ceid=US:en', author: 'Tech CEOs (via news)', isVerified: true },
+  ];
+
+  for (const feed of keyFigureFeeds) {
+    try {
+      const res = await fetch(feed.url, {
+        headers: { 'User-Agent': 'JarvisFinance/1.0' },
+        next: { revalidate: 600 },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) continue;
+      const xml = await res.text();
+      const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
+      let m;
+      let count = 0;
+      while ((m = itemRegex.exec(xml)) !== null && count < 5) {
+        const block = m[1];
+        const titleMatch = block.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+        const title = titleMatch?.[1]?.replace(/<!\[CDATA\[|\]\]>/g, '').replace(/<[^>]*>/g, '').trim() || '';
+        const pubMatch = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/i);
+        const pubDate = pubMatch?.[1]?.trim();
+        if (!title) continue;
+
+        const { sentiment, score } = analyzeSentiment(title);
+        // Detect figure from text
+        const lower = title.toLowerCase();
+        let author = feed.author;
+        if (lower.includes('trump')) author = 'Donald Trump';
+        else if (lower.includes('elon') || lower.includes('musk')) author = 'Elon Musk';
+        else if (lower.includes('cook')) author = 'Tim Cook';
+        else if (lower.includes('nadella')) author = 'Satya Nadella';
+        else if (lower.includes('jensen') || lower.includes('huang')) author = 'Jensen Huang';
+        else if (lower.includes('zuckerberg')) author = 'Mark Zuckerberg';
+
+        allTweets.push({
+          id: `xnews-${count}-${author.slice(0, 5)}`,
+          text: title,
+          author,
+          authorFollowers: 0,
+          likes: 0,
+          retweets: 0,
+          created: pubDate ? new Date(pubDate).toISOString() : new Date().toISOString(),
+          sentiment,
+          sentimentScore: score,
+          tickers: extractTickersFromText(title),
+          isVerified: feed.isVerified,
+        });
+        count++;
+      }
+    } catch {
+      // Key figure feed can fail silently
+    }
+  }
+
   if (allTweets.length === 0) {
     console.warn('[Social] No social posts fetched, using fallback');
     return getMockTweets();
   }
 
-  return allTweets.slice(0, 30);
+  return allTweets.slice(0, 40);
+}
+
+// ============ Ticker Extraction from Text ============
+const COMPANY_TICKER_MAP: Record<string, string> = {
+  'apple': 'AAPL', 'microsoft': 'MSFT', 'google': 'GOOGL', 'alphabet': 'GOOGL',
+  'amazon': 'AMZN', 'nvidia': 'NVDA', 'meta': 'META', 'tesla': 'TSLA',
+  'amd': 'AMD', 'intel': 'INTC', 'palantir': 'PLTR', 'coinbase': 'COIN',
+  'boeing': 'BA', 'jpmorgan': 'JPM', 'salesforce': 'CRM', 'oracle': 'ORCL',
+  'tsmc': 'TSM', 'broadcom': 'AVGO', 'disney': 'DIS',
+};
+
+function extractTickersFromText(text: string): string[] {
+  const found = new Set<string>();
+  const lower = text.toLowerCase();
+  for (const [name, ticker] of Object.entries(COMPANY_TICKER_MAP)) {
+    if (lower.includes(name)) found.add(ticker);
+  }
+  const explicit = text.match(/\$([A-Z]{1,5})\b/g) || [];
+  for (const m of explicit) found.add(m.slice(1));
+  return [...found].slice(0, 5);
 }
 
 // ============ Sentiment ============
 function analyzeSentiment(text: string): { sentiment: 'bullish' | 'bearish' | 'neutral'; score: number } {
-  const bullish = ['buy', 'bull', 'long', 'calls', 'breakout', 'moon', 'surge', 'rally', 'upgrade', 'beat', 'growth', 'strong', '🚀', '📈', '💎', 'undervalued'];
-  const bearish = ['sell', 'bear', 'short', 'puts', 'crash', 'dump', 'decline', 'overvalued', 'downgrade', 'miss', 'weak', '📉', 'bubble', 'warning'];
+  const bullish = ['buy', 'bull', 'long', 'calls', 'breakout', 'moon', 'surge', 'rally', 'upgrade', 'beat', 'growth', 'strong', '🚀', '📈', '💎', 'undervalued',
+    'trade deal', 'tariff cut', 'cooperation', 'open up', 'partnership', 'invest'];
+  const bearish = ['sell', 'bear', 'short', 'puts', 'crash', 'dump', 'decline', 'overvalued', 'downgrade', 'miss', 'weak', '📉', 'bubble', 'warning',
+    'tariff', 'trade war', 'sanctions', 'ban', 'restrict', 'shutdown', 'threat'];
 
   const lower = text.toLowerCase();
   let score = 0;
