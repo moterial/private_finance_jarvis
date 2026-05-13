@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { chatJSON, getLanguageInstruction } from '@/lib/services/ai';
 import { withCache, cacheKey } from '@/lib/cache';
-import { yf } from '@/lib/services/yahoo';
+import { yf, yfRetry } from '@/lib/services/yahoo';
 
 export const dynamic = 'force-dynamic';
 
@@ -212,10 +212,10 @@ export async function POST(request: NextRequest) {
       const startDate = new Date(now);
       startDate.setMonth(startDate.getMonth() - monthsBack);
 
-      const chartData = await yf.chart(ticker, {
+      const chartData = await yfRetry(() => yf.chart(ticker, {
         period1: startDate.toISOString().split('T')[0],
         interval: '1d' as any,
-      });
+      }));
 
       if (chartData?.quotes) {
         historicalPrices = chartData.quotes

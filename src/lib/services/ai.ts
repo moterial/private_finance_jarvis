@@ -364,7 +364,79 @@ ${news.slice(0, 8).map(n => `- ${n.title}`).join('\n')}
 
 Based on this data, find the NON-OBVIOUS opportunities. What is mispriced? Where is the crowd wrong? What second-order effect is nobody pricing in? Create a strategy that gives the user a genuine edge — not generic advice.`;
 
-  return chatJSON<StrategyPlan>(systemPrompt, userPrompt, 2500);
+  const result = await chatJSON<StrategyPlan>(systemPrompt, userPrompt, 2500, 45000);
+  if (result) return result;
+
+  // Fallback: generate a basic strategy from the data if AI fails/times out
+  return generateFallbackStrategy(analysis, bullish, bearish, locale);
+}
+
+function generateFallbackStrategy(
+  analysis: AnalysisReport,
+  bullish: StockSignal[],
+  bearish: StockSignal[],
+  locale: string,
+): StrategyPlan {
+  const isZh = locale === 'zh';
+  const topBull = bullish.slice(0, 3);
+  const topBear = bearish.slice(0, 2);
+  const sentiment = analysis.marketSentimentScore;
+  const bullish_bias = sentiment > 0.1;
+
+  return {
+    shortTerm: {
+      title: isZh
+        ? `短線關注 ${topBull.map(s => s.ticker).join(', ')} 的動量機會`
+        : `Short-term momentum in ${topBull.map(s => s.ticker).join(', ')}`,
+      actions: topBull.map(s =>
+        isZh ? `買入 ${s.ticker} (${s.sector}) — 信心度 ${s.confidence}%` : `Buy ${s.ticker} (${s.sector}) — confidence ${s.confidence}%`
+      ).concat(topBear.slice(0, 1).map(s =>
+        isZh ? `避開 ${s.ticker} — 看空信號強` : `Avoid ${s.ticker} — strong bearish signal`
+      )),
+      timeframe: isZh ? '1-2 週' : '1-2 weeks',
+    },
+    midTerm: {
+      title: isZh
+        ? `中期佈局${bullish_bias ? '偏多' : '謹慎'}策略`
+        : `Mid-term ${bullish_bias ? 'bullish' : 'cautious'} positioning`,
+      actions: [
+        isZh ? `市場情緒分數: ${sentiment.toFixed(2)} — ${bullish_bias ? '偏多' : '中性偏空'}` : `Market sentiment: ${sentiment.toFixed(2)} — ${bullish_bias ? 'bullish' : 'cautious'}`,
+        ...(topBull.slice(0, 2).map(s => isZh ? `加碼 ${s.ticker} 在回調時` : `Add ${s.ticker} on pullbacks`)),
+        isZh ? '保持 10-15% 現金部位' : 'Keep 10-15% cash reserve',
+      ],
+      timeframe: isZh ? '1-3 個月' : '1-3 months',
+    },
+    longTerm: {
+      title: isZh ? '長期核心持倉配置' : 'Long-term core allocation',
+      actions: [
+        isZh ? '科技/AI 板塊維持超配' : 'Overweight tech/AI sector',
+        isZh ? '分散配置防禦性標的' : 'Diversify into defensive names',
+        isZh ? '定期再平衡每季一次' : 'Rebalance quarterly',
+      ],
+      timeframe: isZh ? '6-12 個月' : '6-12 months',
+    },
+    catalysts: topBull.slice(0, 3).map(s => ({
+      event: isZh ? `${s.ticker} 財報/產品發布` : `${s.ticker} earnings/product launch`,
+      expectedDate: isZh ? '近期' : 'Upcoming',
+      impact: 'bullish',
+      affectedTickers: [s.ticker],
+    })).concat(topBear.slice(0, 2).map(s => ({
+      event: isZh ? `${s.ticker} 潛在風險事件` : `${s.ticker} potential risk event`,
+      expectedDate: isZh ? '近期' : 'Upcoming',
+      impact: 'bearish',
+      affectedTickers: [s.ticker],
+    }))),
+    portfolioAllocation: [
+      { category: isZh ? '成長股' : 'Growth', percentage: 40, reasoning: isZh ? '高動量標的' : 'High momentum names' },
+      { category: isZh ? '科技/AI' : 'Tech/AI', percentage: 25, reasoning: isZh ? '長期結構性趨勢' : 'Structural long-term trend' },
+      { category: isZh ? '防禦/債券' : 'Defensive/Bonds', percentage: 15, reasoning: isZh ? '下行保護' : 'Downside protection' },
+      { category: isZh ? '現金' : 'Cash', percentage: 10, reasoning: isZh ? '等待機會' : 'Dry powder for opportunities' },
+      { category: isZh ? '另類資產' : 'Alternatives', percentage: 10, reasoning: isZh ? '分散風險' : 'Diversification' },
+    ],
+    bottomLine: isZh
+      ? `市場情緒${bullish_bias ? '偏多' : '中性'}，建議${bullish_bias ? '積極佈局' : '謹慎操作'}。重點關注 ${topBull.map(s => s.ticker).join(', ')}。`
+      : `Market sentiment is ${bullish_bias ? 'bullish' : 'neutral'}. ${bullish_bias ? 'Lean into' : 'Be cautious with'} positions. Focus on ${topBull.map(s => s.ticker).join(', ')}.`,
+  };
 }
 
 export { isAIEnabled };

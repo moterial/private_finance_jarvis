@@ -59,8 +59,8 @@ async function fetchEarningsFromYahoo(): Promise<EarningsEvent[]> {
   for (let i = 0; i < majorTickers.length; i += batchSize) {
     const batch = majorTickers.slice(i, i + batchSize);
     try {
-      const { yf } = await import('./yahoo');
-      const quotes = await yf.quote(batch);
+      const { yf, yfRetry } = await import('./yahoo');
+      const quotes = await yfRetry(() => yf.quote(batch));
       const quoteArr = Array.isArray(quotes) ? quotes : [quotes];
 
       for (const q of quoteArr) {

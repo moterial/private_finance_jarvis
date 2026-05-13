@@ -1,5 +1,5 @@
 import { CandleData } from '../types/extended';
-import { yf } from './yahoo';
+import { yf, yfRetry } from './yahoo';
 
 /**
  * Stock data service: Finnhub (if key available) → Yahoo Finance (free fallback).
@@ -61,7 +61,7 @@ async function getQuoteFinnhub(ticker: string): Promise<StockQuote | null> {
 
 async function getQuoteYahoo(ticker: string): Promise<StockQuote | null> {
   try {
-    const q = await yf.quote(ticker);
+    const q = await yfRetry(() => yf.quote(ticker));
     if (!q || !q.regularMarketPrice) return null;
 
     return {
@@ -143,10 +143,10 @@ async function getCandlesYahoo(ticker: string, days: number, interval: string = 
     };
     const yahooInterval = yahooIntervalMap[interval] || '1d';
 
-    const chartData = await yf.chart(ticker, {
+    const chartData = await yfRetry(() => yf.chart(ticker, {
       period1: startDate.toISOString().split('T')[0],
       interval: yahooInterval as any,
-    });
+    }));
 
     if (!chartData?.quotes || chartData.quotes.length === 0) return null;
 
@@ -351,7 +351,7 @@ export interface CompanyProfile {
 
 export async function getCompanyProfile(ticker: string): Promise<CompanyProfile | null> {
   try {
-    const q = await yf.quote(ticker);
+    const q = await yfRetry(() => yf.quote(ticker));
     if (!q) return null;
 
     return {
