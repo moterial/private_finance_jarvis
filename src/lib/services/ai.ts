@@ -45,7 +45,7 @@ export async function chatCompletion(systemPrompt: string, userPrompt: string, m
   }
 }
 
-export async function chatJSON<T>(systemPrompt: string, userPrompt: string, maxTokens = 2000): Promise<T | null> {
+export async function chatJSON<T>(systemPrompt: string, userPrompt: string, maxTokens = 2000, timeoutMs = 90000): Promise<T | null> {
   const client = getClient();
   if (!client) return null;
 
@@ -55,6 +55,8 @@ export async function chatJSON<T>(systemPrompt: string, userPrompt: string, maxT
     : userPrompt;
 
   try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     const response = await client.chat.completions.create({
       model: MODEL,
       messages: [
@@ -64,7 +66,8 @@ export async function chatJSON<T>(systemPrompt: string, userPrompt: string, maxT
       max_tokens: maxTokens,
       temperature: 0.5,
       response_format: { type: 'json_object' },
-    });
+    }, { signal: controller.signal });
+    clearTimeout(timer);
     const content = response.choices[0]?.message?.content;
     if (!content) return null;
     return JSON.parse(content) as T;
