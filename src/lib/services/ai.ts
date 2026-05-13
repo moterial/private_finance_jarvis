@@ -19,6 +19,11 @@ function isAIEnabled(): boolean {
 const MODEL = process.env.LLM_MODEL_NAME || 'gpt-4o-mini';
 
 // ============ Helper ============
+// DeepSeek reasoning models spend tokens on hidden reasoning_content before generating visible content.
+// We multiply max_tokens to ensure enough budget for both reasoning + output.
+const IS_REASONING_MODEL = MODEL.includes('deepseek');
+const TOKEN_MULTIPLIER = IS_REASONING_MODEL ? 8 : 1;
+
 export async function chatCompletion(systemPrompt: string, userPrompt: string, maxTokens = 1500): Promise<string | null> {
   const client = getClient();
   if (!client) return null;
@@ -35,10 +40,15 @@ export async function chatCompletion(systemPrompt: string, userPrompt: string, m
         { role: 'system', content: systemPrompt },
         { role: 'user', content: finalUserPrompt },
       ],
-      max_tokens: maxTokens,
+      max_tokens: maxTokens * TOKEN_MULTIPLIER,
       temperature: 0.7,
     });
-    return response.choices[0]?.message?.content ?? null;
+    const choice = response.choices[0];
+    // DeepSeek reasoning models may return content in reasoning_content when content is empty
+    const content = choice?.message?.content;
+    if (content) return content;
+    const reasoning = (choice?.message as unknown as Record<string, unknown>)?.reasoning_content as string | undefined;
+    return reasoning || null;
   } catch (error) {
     console.error('[AI Service] OpenAI API error:', error);
     return null;
@@ -63,12 +73,17 @@ export async function chatJSON<T>(systemPrompt: string, userPrompt: string, maxT
         { role: 'system', content: systemPrompt },
         { role: 'user', content: finalUserPrompt },
       ],
-      max_tokens: maxTokens,
+      max_tokens: maxTokens * TOKEN_MULTIPLIER,
       temperature: 0.5,
       response_format: { type: 'json_object' },
     }, { signal: controller.signal });
     clearTimeout(timer);
-    const content = response.choices[0]?.message?.content;
+    const choice = response.choices[0];
+    let content = choice?.message?.content;
+    // DeepSeek reasoning models: fallback to reasoning_content
+    if (!content) {
+      content = (choice?.message as unknown as Record<string, unknown>)?.reasoning_content as string | undefined || null;
+    }
     if (!content) return null;
     return JSON.parse(content) as T;
   } catch (error) {
