@@ -32,6 +32,8 @@ module.exports = {
           'red-dim': '#b82448',
           yellow: '#ffcc00',
           'yellow-dim': '#b89900',
+          amber: '#ff9500',
+          blue: '#3b82f6',
         },
       },
       fontFamily: {
@@ -64,6 +66,8 @@ module.exports = {
         'slide-in-right': 'slideInRight 0.3s ease-out forwards',
         'scale-in': 'scaleIn 0.2s ease-out forwards',
         'content-in': 'contentIn 0.3s ease-out forwards',
+        'shimmer': 'shimmer 1.5s ease-in-out infinite',
+        'count-up': 'countUp 0.6s ease-out forwards',
       },
       keyframes: {
         glow: {
@@ -96,6 +100,15 @@ module.exports = {
         },
         contentIn: {
           '0%': { opacity: '0', transform: 'translateY(8px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        shimmer: {
+          '0%': { opacity: '0.5' },
+          '50%': { opacity: '1' },
+          '100%': { opacity: '0.5' },
+        },
+        countUp: {
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
       },

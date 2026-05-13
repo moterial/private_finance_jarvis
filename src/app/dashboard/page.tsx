@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { AnalysisReport, MarketOverview as MarketOverviewType, RedditPost, Tweet, NewsArticle, StockSignal } from '@/lib/types';
 import { AgentState, AgentFinding, ExpertSummary, ChainReaction } from '@/lib/types/extended';
 import { useI18n } from '@/lib/i18n/context';
@@ -13,19 +14,8 @@ import AnalysisPanel from '@/components/dashboard/AnalysisPanel';
 import SocialFeed from '@/components/dashboard/SocialFeed';
 import SentimentChart from '@/components/dashboard/SentimentChart';
 import StockDetail from '@/components/dashboard/StockDetail';
-import PortfolioView from '@/components/portfolio/PortfolioView';
-import AgentPanel from '@/components/agents/AgentPanel';
-import StrategyPanel from '@/components/strategy/StrategyPanel';
-import OptionsPanel from '@/components/options/OptionsPanel';
-import EarningsPanel from '@/components/earnings/EarningsPanel';
-import AnomalyPanel from '@/components/anomaly/AnomalyPanel';
-import DebatePanel from '@/components/debate/DebatePanel';
-import AlertsPanel from '@/components/alerts/AlertsPanel';
-import BacktestPanel from '@/components/backtest/BacktestPanel';
-import MultiAssetPanel from '@/components/multi-asset/MultiAssetPanel';
-import SentimentHeatmap from '@/components/heatmap/SentimentHeatmap';
-import JournalPanel from '@/components/journal/JournalPanel';
 import { FullPageLoader } from '@/components/ui/Loading';
+import { PanelSkeleton } from '@/components/ui/Skeleton';
 import { cn } from '@/lib/utils';
 import {
   TrendingUp, TrendingDown, Newspaper, Users, LayoutDashboard,
@@ -33,6 +23,20 @@ import {
   Bell, History, Globe, Flame, BookOpen, ChevronLeft, ChevronRight,
   Search, X, Sparkles,
 } from 'lucide-react';
+
+// Lazy load heavy tab panels — only downloaded when the tab is opened
+const PortfolioView = dynamic(() => import('@/components/portfolio/PortfolioView'), { loading: () => <PanelSkeleton /> });
+const AgentPanel = dynamic(() => import('@/components/agents/AgentPanel'), { loading: () => <PanelSkeleton /> });
+const StrategyPanel = dynamic(() => import('@/components/strategy/StrategyPanel'), { loading: () => <PanelSkeleton /> });
+const OptionsPanel = dynamic(() => import('@/components/options/OptionsPanel'), { loading: () => <PanelSkeleton /> });
+const EarningsPanel = dynamic(() => import('@/components/earnings/EarningsPanel'), { loading: () => <PanelSkeleton /> });
+const AnomalyPanel = dynamic(() => import('@/components/anomaly/AnomalyPanel'), { loading: () => <PanelSkeleton /> });
+const DebatePanel = dynamic(() => import('@/components/debate/DebatePanel'), { loading: () => <PanelSkeleton /> });
+const AlertsPanel = dynamic(() => import('@/components/alerts/AlertsPanel'), { loading: () => <PanelSkeleton /> });
+const BacktestPanel = dynamic(() => import('@/components/backtest/BacktestPanel'), { loading: () => <PanelSkeleton /> });
+const MultiAssetPanel = dynamic(() => import('@/components/multi-asset/MultiAssetPanel'), { loading: () => <PanelSkeleton /> });
+const SentimentHeatmap = dynamic(() => import('@/components/heatmap/SentimentHeatmap'), { loading: () => <PanelSkeleton /> });
+const JournalPanel = dynamic(() => import('@/components/journal/JournalPanel'), { loading: () => <PanelSkeleton /> });
 
 interface DashboardData {
   analysis: AnalysisReport;
@@ -120,6 +124,8 @@ export default function DashboardPage() {
     },
   ];
 
+  const [commandIdx, setCommandIdx] = useState(0);
+
   const allTabs = NAV_GROUPS.flatMap(g => g.items);
 
   // Tab navigation with animation
@@ -135,22 +141,35 @@ export default function DashboardPage() {
     }, 150);
   }, [activeTab]);
 
-  // Command palette keyboard shortcut
+  // Command palette keyboard shortcut + arrow navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         setCommandOpen(prev => !prev);
         setCommandSearch('');
+        setCommandIdx(0);
       }
       if (e.key === 'Escape') {
         setCommandOpen(false);
         setMobileNavOpen(false);
       }
+      if (commandOpen) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setCommandIdx(prev => prev + 1);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setCommandIdx(prev => Math.max(0, prev - 1));
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          // Enter selection is handled via onKeyDown on the input
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [commandOpen]);
 
   // Data fetching
   const fetchData = useCallback(async () => {
@@ -230,6 +249,14 @@ export default function DashboardPage() {
         return label.includes(commandSearch.toLowerCase()) || tab.id.includes(commandSearch.toLowerCase());
       })
     : allTabs;
+
+  // Keep commandIdx in bounds & handle Enter key
+  const clampedIdx = Math.min(commandIdx, Math.max(0, filteredCommands.length - 1));
+  const handleCommandEnter = () => {
+    if (filteredCommands[clampedIdx]) {
+      navigateTo(filteredCommands[clampedIdx].id);
+    }
+  };
 
   return (
     <div className="h-screen bg-jarvis-black flex flex-col overflow-hidden">
@@ -449,7 +476,12 @@ export default function DashboardPage() {
                   placeholder={locale === 'zh' ? '搜尋功能或頁面...' : 'Search features...'}
                   className="flex-1 bg-transparent text-sm text-jarvis-white placeholder-jarvis-gray-500 focus:outline-none"
                   value={commandSearch}
-                  onChange={e => setCommandSearch(e.target.value)}
+                  onChange={e => { setCommandSearch(e.target.value); setCommandIdx(0); }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') { e.preventDefault(); handleCommandEnter(); }
+                    if (e.key === 'ArrowDown') { e.preventDefault(); setCommandIdx(prev => Math.min(prev + 1, filteredCommands.length - 1)); }
+                    if (e.key === 'ArrowUp') { e.preventDefault(); setCommandIdx(prev => Math.max(0, prev - 1)); }
+                  }}
                   autoFocus
                 />
                 <button onClick={() => setCommandOpen(false)} className="p-1 rounded text-jarvis-gray-500 hover:text-jarvis-white transition-colors">
@@ -462,10 +494,13 @@ export default function DashboardPage() {
                   <button
                     key={item.id}
                     onClick={() => navigateTo(item.id)}
+                    onMouseEnter={() => setCommandIdx(i)}
                     className={cn(
                       'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-150',
-                      activeTab === item.id
-                        ? 'bg-jarvis-accent/10 text-jarvis-accent'
+                      i === clampedIdx
+                        ? 'bg-jarvis-accent/10 text-jarvis-accent ring-1 ring-jarvis-accent/20'
+                        : activeTab === item.id
+                        ? 'bg-jarvis-gray-800/30 text-jarvis-accent'
                         : 'text-jarvis-gray-300 hover:bg-jarvis-gray-800/50 hover:text-jarvis-white'
                     )}
                   >
