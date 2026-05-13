@@ -23,12 +23,17 @@ export async function chatCompletion(systemPrompt: string, userPrompt: string, m
   const client = getClient();
   if (!client) return null;
 
+  // Reinforce language at end of user prompt for models that deprioritize system instructions
+  const finalUserPrompt = systemPrompt.includes('繁體中文')
+    ? userPrompt + '\n\n[回覆語言：繁體中文。請用中文回答。]'
+    : userPrompt;
+
   try {
     const response = await client.chat.completions.create({
       model: MODEL,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
+        { role: 'user', content: finalUserPrompt },
       ],
       max_tokens: maxTokens,
       temperature: 0.7,
@@ -44,12 +49,17 @@ export async function chatJSON<T>(systemPrompt: string, userPrompt: string, maxT
   const client = getClient();
   if (!client) return null;
 
+  // Reinforce language at end of user prompt for models that deprioritize system instructions
+  const finalUserPrompt = systemPrompt.includes('繁體中文')
+    ? userPrompt + '\n\n[回覆語言：繁體中文。所有 JSON value 必須是中文。]'
+    : userPrompt;
+
   try {
     const response = await client.chat.completions.create({
       model: MODEL,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
+        { role: 'user', content: finalUserPrompt },
       ],
       max_tokens: maxTokens,
       temperature: 0.5,
@@ -67,7 +77,7 @@ export async function chatJSON<T>(systemPrompt: string, userPrompt: string, maxT
 // ============ Locale Helpers ============
 export function getLanguageInstruction(locale: string): string {
   if (locale === 'zh') {
-    return '\n\nIMPORTANT: You MUST respond entirely in Traditional Chinese (繁體中文). All text, analysis, and explanations must be in Chinese.';
+    return '\n\n[LANGUAGE REQUIREMENT — MANDATORY]\n你必須完全使用繁體中文回覆。所有分析、見解、建議和解釋都必須是中文。不要使用英文。This is non-negotiable: respond ENTIRELY in Traditional Chinese (繁體中文).';
   }
   return '';
 }
