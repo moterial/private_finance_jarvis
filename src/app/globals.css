@@ -130,6 +130,29 @@ body {
   .animation-delay-600 {
     animation-delay: 600ms;
   }
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* ============ Interactive Hover Effects ============ */
+.glass-panel {
+  transition: all 0.2s ease-out;
+}
+
+.glass-panel:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Button press effect */
+button:active {
+  transition: transform 0.1s ease-out;
+}
+
+/* Smooth scrollbar */
+.overflow-y-auto {
+  scroll-behavior: smooth;
 }
 
 /* ============ Global Text Readability ============ */
