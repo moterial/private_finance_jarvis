@@ -206,6 +206,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchData();
+    // Auto-refresh every 2 minutes to keep prices current
+    const interval = setInterval(fetchData, 2 * 60 * 1000);
+    return () => clearInterval(interval);
   }, [fetchData]);
 
   // Responsive: auto-collapse sidebar on smaller screens

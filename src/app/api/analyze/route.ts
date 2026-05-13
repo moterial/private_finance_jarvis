@@ -13,8 +13,8 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 // Cache TTLs
-const DATA_TTL  = 10 * 60 * 1000; // 10 min for market data (Reddit, news, etc.)
-const AI_TTL    = 30 * 60 * 1000; // 30 min for AI-generated insights
+const DATA_TTL  = 2 * 60 * 1000; // 2 min for market data — keep prices fresh
+const AI_TTL    = 15 * 60 * 1000; // 15 min for AI-generated insights
 
 export async function GET(request: NextRequest) {
   const locale = request.nextUrl.searchParams.get('locale') || 'en';

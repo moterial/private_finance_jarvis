@@ -19,6 +19,7 @@ async function getCrumb(): Promise<{ cookie: string; crumb: string }> {
   const r1 = await fetch('https://fc.yahoo.com', {
     redirect: 'manual',
     headers: { 'User-Agent': UA },
+    cache: 'no-store',
   });
   const setCookie = r1.headers.get('set-cookie') || '';
   const cookieMatch = setCookie.match(/(A3=[^;]+)/);
@@ -28,6 +29,7 @@ async function getCrumb(): Promise<{ cookie: string; crumb: string }> {
   // Step 2: Get crumb
   const r2 = await fetch(`${YF_HOST}/v1/test/getcrumb`, {
     headers: { 'User-Agent': UA, 'Cookie': cookie },
+    cache: 'no-store',
   });
   if (!r2.ok) throw new Error(`Failed to get crumb, status ${r2.status}, statusText: ${r2.statusText}`);
   const crumb = await r2.text();
@@ -53,7 +55,7 @@ export async function yfChart(
   if (opts.range && !opts.period1) params.set('range', opts.range);
 
   const url = `${YF_HOST}/v8/finance/chart/${encodeURIComponent(symbol)}?${params}`;
-  const res = await fetch(url, { headers: { 'User-Agent': UA } });
+  const res = await fetch(url, { headers: { 'User-Agent': UA }, cache: 'no-store' });
   if (!res.ok) throw new Error(`yfChart ${symbol}: ${res.status}`);
   const json = await res.json();
   return json?.chart?.result?.[0] || null;
@@ -115,6 +117,7 @@ export async function yfOptions(symbol: string, date?: string): Promise<any> {
       const url = `${YF_HOST}/v7/finance/options/${encodeURIComponent(symbol)}?${params}`;
       const res = await fetch(url, {
         headers: { 'User-Agent': UA, 'Cookie': cookie },
+        cache: 'no-store',
       });
       if (!res.ok) {
         // Invalidate crumb on auth errors
