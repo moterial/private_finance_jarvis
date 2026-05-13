@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
         return result;
       },
       5 * 60 * 1000,
-    ).catch(() => null);
+    ).catch((e: any) => { console.error('[Options API] chain fetch error:', e?.message || e); return null; });
     if (!chain) {
       return NextResponse.json({ success: false, error: 'No options data available — Yahoo Finance may be temporarily unavailable' }, { status: 404 });
     }
