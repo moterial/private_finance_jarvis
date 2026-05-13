@@ -187,7 +187,7 @@ export async function getRealMarketOverview(): Promise<{
   // Yahoo Finance symbols for major indices
   const symbols = [
     { symbol: '^GSPC', name: 'S&P 500' },
-    { symbol: '^IXIC', name: 'NASDAQ' },
+    { symbol: '^NDX', name: 'NASDAQ 100' },
     { symbol: '^DJI', name: 'Dow Jones' },
     { symbol: '^VIX', name: 'VIX' },
   ];
