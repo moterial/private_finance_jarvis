@@ -341,10 +341,10 @@ MARKET SENTIMENT: ${analysis.marketSentimentScore.toFixed(2)} (-1 to +1)
 TRENDING TOPICS: ${topics.slice(0, 8).map(t => `${t.topic}(${t.sentiment})`).join(', ')}
 
 TOP BULLISH SIGNALS:
-${bullish.slice(0, 8).map(s => `- ${s.ticker} (${s.sector}): score ${(s.compositeScore ?? 0).toFixed(1)}, sources: ${(s.sources || []).join(', ')}`).join('\n')}
+${bullish.slice(0, 8).map(s => `- ${s.ticker} (${s.sector}): confidence ${s.confidence}%, sources: ${(s.sources || []).map(src => src.source).join(', ')}`).join('\n')}
 
 TOP BEARISH SIGNALS:
-${bearish.slice(0, 5).map(s => `- ${s.ticker} (${s.sector}): score ${(s.compositeScore ?? 0).toFixed(1)}`).join('\n')}
+${bearish.slice(0, 5).map(s => `- ${s.ticker} (${s.sector}): confidence ${s.confidence}%`).join('\n')}
 
 RECENT NEWS HEADLINES:
 ${news.slice(0, 8).map(n => `- ${n.title}`).join('\n')}
