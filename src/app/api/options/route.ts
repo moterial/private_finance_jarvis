@@ -17,13 +17,18 @@ export async function GET(request: NextRequest) {
 
   try {
     // Cache chain data per ticker+expiration for 5 min — shared across all users
+    // Don't cache null results (fetch failures)
     const chain = await withCache(
       cacheKey('options:chain', ticker, expiration || 'default'),
-      () => fetchOptionsChain(ticker!, expiration),
+      async () => {
+        const result = await fetchOptionsChain(ticker!, expiration);
+        if (!result) throw new Error('fetch_failed');
+        return result;
+      },
       5 * 60 * 1000,
-    );
+    ).catch(() => null);
     if (!chain) {
-      return NextResponse.json({ success: false, error: 'No options data available' }, { status: 404 });
+      return NextResponse.json({ success: false, error: 'No options data available — Yahoo Finance may be temporarily unavailable' }, { status: 404 });
     }
 
     const strategies = buildStrategies(chain);

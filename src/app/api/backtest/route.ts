@@ -203,26 +203,55 @@ export async function POST(request: NextRequest) {
     const periodMap: Record<string, string> = { '3mo': '3mo', '6mo': '6mo', '1y': '1y', '2y': '2y' };
     const range = periodMap[period] || '6mo';
 
-    const res = await yahooFetch(
-      `${YF_BASE}/v8/finance/chart/${ticker}?range=${range}&interval=1d`
-    );
-
+    // Try authenticated Yahoo fetch first, fallback to unauthenticated chart API
     let historicalPrices: PricePoint[] = [];
-    if (res.ok) {
-      const data = await res.json();
-      const result = data.chart?.result?.[0];
-      if (result) {
-        const timestamps = result.timestamp || [];
-        const closes = result.indicators?.quote?.[0]?.close || [];
-        historicalPrices = timestamps.map((ts: number, i: number) => ({
-          date: new Date(ts * 1000).toISOString().split('T')[0],
-          close: closes[i] != null ? parseFloat(closes[i].toFixed(2)) : null,
-        })).filter((p: any) => p.close != null);
+    try {
+      const res = await yahooFetch(
+        `${YF_BASE}/v8/finance/chart/${ticker}?range=${range}&interval=1d`
+      );
+
+      if (res.ok) {
+        const data = await res.json();
+        const result = data.chart?.result?.[0];
+        if (result) {
+          const timestamps = result.timestamp || [];
+          const closes = result.indicators?.quote?.[0]?.close || [];
+          historicalPrices = timestamps.map((ts: number, i: number) => ({
+            date: new Date(ts * 1000).toISOString().split('T')[0],
+            close: closes[i] != null ? parseFloat(closes[i].toFixed(2)) : null,
+          })).filter((p: any) => p.close != null);
+        }
+      }
+    } catch (e) {
+      console.warn('[Backtest] Yahoo authenticated fetch failed:', e);
+    }
+
+    // Fallback: try chart API without auth (sometimes works for chart data)
+    if (historicalPrices.length < 35) {
+      try {
+        const fallbackRes = await fetch(
+          `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=${range}&interval=1d`,
+          { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } }
+        );
+        if (fallbackRes.ok) {
+          const data = await fallbackRes.json();
+          const result = data.chart?.result?.[0];
+          if (result) {
+            const timestamps = result.timestamp || [];
+            const closes = result.indicators?.quote?.[0]?.close || [];
+            historicalPrices = timestamps.map((ts: number, i: number) => ({
+              date: new Date(ts * 1000).toISOString().split('T')[0],
+              close: closes[i] != null ? parseFloat(closes[i].toFixed(2)) : null,
+            })).filter((p: any) => p.close != null);
+          }
+        }
+      } catch (e) {
+        console.warn('[Backtest] Fallback chart fetch also failed:', e);
       }
     }
 
     if (historicalPrices.length < 35) {
-      return NextResponse.json({ success: false, error: 'Insufficient historical data' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Insufficient historical data — Yahoo Finance may be blocking this server' }, { status: 400 });
     }
 
     // Run simulation locally — instant
