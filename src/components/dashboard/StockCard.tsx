@@ -11,17 +11,30 @@ interface StockCardProps {
   onClick?: () => void;
 }
 
-// Generate a fake sparkline path from price data hints
-function generateSparkline(isUp: boolean, confidence: number): string {
-  const points = 12;
+// Generate sparkline SVG path from real price data or fallback
+function generateSparkline(prices?: number[], isUp?: boolean, confidence?: number): string {
   const h = 24;
   const w = 60;
-  const seed = confidence * 137; // deterministic from confidence
+
+  if (prices && prices.length >= 2) {
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const range = max - min || 1;
+    const step = w / (prices.length - 1);
+    return prices.map((p, i) => {
+      const y = h - 2 - ((p - min) / range) * (h - 4);
+      return `${i === 0 ? 'M' : 'L'}${(i * step).toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+  }
+
+  // Fallback: deterministic fake sparkline
+  const points = 12;
+  const seed = (confidence || 50) * 137;
   const vals: number[] = [];
-  let v = isUp ? h * 0.7 : h * 0.3;
+  let v = (isUp ?? true) ? h * 0.7 : h * 0.3;
   for (let i = 0; i < points; i++) {
     const noise = Math.sin(seed + i * 1.7) * h * 0.15 + Math.cos(seed * 0.3 + i * 2.1) * h * 0.1;
-    const trend = isUp ? -((i / points) * h * 0.4) : ((i / points) * h * 0.4);
+    const trend = (isUp ?? true) ? -((i / points) * h * 0.4) : ((i / points) * h * 0.4);
     v = Math.max(2, Math.min(h - 2, v + noise * 0.5 + trend * 0.08));
     vals.push(v);
   }
@@ -51,7 +64,7 @@ export default function StockCard({ signal, rank, onClick }: StockCardProps) {
     return () => observer.disconnect();
   }, [signal.confidence]);
 
-  const sparkPath = generateSparkline(isUp, signal.confidence);
+  const sparkPath = generateSparkline(signal.sparkline, isUp, signal.confidence);
   const sparkColor = isUp ? '#00ff88' : '#ff3366';
 
   return (

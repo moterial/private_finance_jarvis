@@ -209,64 +209,58 @@ function extractTrendingTopics(
   tweets: Tweet[],
   newsArticles: NewsArticle[]
 ): TrendingTopic[] {
-  const topics: TrendingTopic[] = [
-    {
-      topic: 'AI & Machine Learning',
-      mentions: 47,
-      sentiment: 'bullish',
-      sentimentScore: 0.78,
-      relatedTickers: ['NVDA', 'MSFT', 'GOOGL', 'AMD'],
-      sources: ['reddit', 'twitter', 'news'],
-      trend: 'rising',
-    },
-    {
-      topic: 'Federal Reserve Policy',
-      mentions: 32,
-      sentiment: 'bullish',
-      sentimentScore: 0.42,
-      relatedTickers: ['JPM', 'V'],
-      sources: ['news', 'twitter'],
-      trend: 'stable',
-    },
-    {
-      topic: 'EV Market Competition',
-      mentions: 28,
-      sentiment: 'bearish',
-      sentimentScore: -0.35,
-      relatedTickers: ['TSLA'],
-      sources: ['reddit', 'twitter', 'news'],
-      trend: 'rising',
-    },
-    {
-      topic: 'Cloud Computing',
-      mentions: 25,
-      sentiment: 'bullish',
-      sentimentScore: 0.65,
-      relatedTickers: ['MSFT', 'AMZN', 'GOOGL'],
-      sources: ['twitter', 'news'],
-      trend: 'stable',
-    },
-    {
-      topic: 'Semiconductor Supply',
-      mentions: 21,
-      sentiment: 'bullish',
-      sentimentScore: 0.52,
-      relatedTickers: ['NVDA', 'AMD', 'INTC'],
-      sources: ['reddit', 'news'],
-      trend: 'rising',
-    },
-    {
-      topic: 'Digital Advertising',
-      mentions: 18,
-      sentiment: 'neutral',
-      sentimentScore: -0.08,
-      relatedTickers: ['META', 'GOOGL'],
-      sources: ['twitter', 'news'],
-      trend: 'falling',
-    },
+  // Topic detection keywords → topic name + related tickers
+  const TOPIC_DEFS: { keywords: string[]; topic: string; tickers: string[] }[] = [
+    { keywords: ['ai', 'artificial intelligence', 'machine learning', 'chatgpt', 'llm', 'deepseek', 'copilot', 'generative'], topic: 'AI & Machine Learning', tickers: ['NVDA', 'MSFT', 'GOOGL', 'AMD', 'META'] },
+    { keywords: ['fed', 'federal reserve', 'rate cut', 'rate hike', 'interest rate', 'fomc', 'powell', 'inflation', 'cpi'], topic: 'Federal Reserve & Rates', tickers: ['JPM', 'V', 'GS'] },
+    { keywords: ['ev', 'electric vehicle', 'byd', 'tesla', 'charging', 'battery', 'autonomous'], topic: 'EV & Autonomous', tickers: ['TSLA'] },
+    { keywords: ['cloud', 'azure', 'aws', 'gcp', 'saas', 'data center'], topic: 'Cloud Computing', tickers: ['MSFT', 'AMZN', 'GOOGL', 'CRM'] },
+    { keywords: ['chip', 'semiconductor', 'gpu', 'cuda', 'tsmc', 'fab', 'wafer'], topic: 'Semiconductors', tickers: ['NVDA', 'AMD', 'INTC', 'TSM', 'AVGO'] },
+    { keywords: ['ad revenue', 'advertising', 'digital ads', 'social media', 'instagram', 'tiktok', 'youtube'], topic: 'Digital Advertising', tickers: ['META', 'GOOGL', 'SNAP'] },
+    { keywords: ['tariff', 'trade war', 'trade deal', 'sanctions', 'export control', 'embargo'], topic: 'Trade & Tariffs', tickers: [] },
+    { keywords: ['trump', 'president', 'white house', 'congress', 'executive order', 'election', 'political'], topic: 'US Politics', tickers: [] },
+    { keywords: ['china', 'xi jinping', 'beijing', 'ccp', 'geopolitical', 'taiwan'], topic: 'China & Geopolitics', tickers: ['TSM', 'BABA'] },
+    { keywords: ['crypto', 'bitcoin', 'ethereum', 'btc', 'eth', 'blockchain', 'defi'], topic: 'Crypto & Blockchain', tickers: ['COIN'] },
+    { keywords: ['oil', 'energy', 'opec', 'natural gas', 'crude', 'renewable'], topic: 'Energy & Oil', tickers: [] },
+    { keywords: ['earnings', 'revenue', 'beat estimate', 'miss estimate', 'guidance', 'quarterly'], topic: 'Earnings Season', tickers: [] },
   ];
 
-  return topics;
+  // Scan all content
+  const allTexts: { text: string; score: number; source: 'reddit' | 'twitter' | 'news' }[] = [];
+  for (const p of redditPosts) allTexts.push({ text: (p.title + ' ' + (p.selfText || '')).toLowerCase(), score: p.sentimentScore, source: 'reddit' });
+  for (const t of tweets) allTexts.push({ text: t.text.toLowerCase(), score: t.sentimentScore, source: 'twitter' });
+  for (const n of newsArticles) allTexts.push({ text: (n.title + ' ' + n.description).toLowerCase(), score: n.sentimentScore, source: 'news' });
+
+  const topicStats = TOPIC_DEFS.map(def => {
+    let mentions = 0;
+    let totalScore = 0;
+    const sources = new Set<'reddit' | 'twitter' | 'news'>();
+
+    for (const item of allTexts) {
+      if (def.keywords.some(kw => item.text.includes(kw))) {
+        mentions++;
+        totalScore += item.score;
+        sources.add(item.source);
+      }
+    }
+
+    const avgScore = mentions > 0 ? totalScore / mentions : 0;
+    return {
+      topic: def.topic,
+      mentions,
+      sentiment: (avgScore > 0.1 ? 'bullish' : avgScore < -0.1 ? 'bearish' : 'neutral') as 'bullish' | 'bearish' | 'neutral',
+      sentimentScore: Number(avgScore.toFixed(2)),
+      relatedTickers: def.tickers,
+      sources: [...sources] as ('reddit' | 'twitter' | 'news')[],
+      trend: (mentions >= 8 ? 'rising' : mentions >= 3 ? 'stable' : 'falling') as 'rising' | 'falling' | 'stable',
+    };
+  });
+
+  // Return topics with at least 1 mention, sorted by mentions desc
+  return topicStats
+    .filter(t => t.mentions > 0)
+    .sort((a, b) => b.mentions - a.mentions)
+    .slice(0, 8);
 }
 
 function generateInsights(
@@ -301,13 +295,41 @@ function generateInsights(
   return insights;
 }
 
+/**
+ * Compute Fear & Greed score (0-100) from market sentiment signals.
+ * Factors: overall sentiment, VIX level, bullish vs bearish ratio, momentum.
+ */
+export function computeFearGreed(
+  sentimentScore: number,
+  vixValue: number,
+  bullishCount: number,
+  bearishCount: number,
+): number {
+  // Sentiment component (0-25): sentimentScore ranges -1 to 1
+  const sentimentPart = ((sentimentScore + 1) / 2) * 25;
+
+  // VIX component (0-25): low VIX = greed, high VIX = fear
+  const vixNorm = vixValue > 0 ? Math.max(0, Math.min(1, 1 - (vixValue - 12) / 30)) : 0.5;
+  const vixPart = vixNorm * 25;
+
+  // Bull/Bear ratio component (0-25)
+  const total = bullishCount + bearishCount || 1;
+  const bullRatio = bullishCount / total;
+  const ratioPart = bullRatio * 25;
+
+  // Momentum component (0-25): derived from sentiment strength
+  const momentumPart = Math.abs(sentimentScore) * 25 * (sentimentScore > 0 ? 1 : 0.3);
+
+  return Math.round(Math.max(0, Math.min(100, sentimentPart + vixPart + ratioPart + momentumPart)));
+}
+
 export function getMarketOverview(): MarketOverview {
   return {
-    sp500: { name: 'S&P 500', value: 5321.41, change: 28.54, changePercent: 0.54 },
-    nasdaq: { name: 'NASDAQ', value: 16742.39, change: 115.82, changePercent: 0.70 },
-    dowJones: { name: 'Dow Jones', value: 39512.84, change: -45.20, changePercent: -0.11 },
-    vix: { name: 'VIX', value: 13.25, change: -0.82, changePercent: -5.83 },
-    fearGreedIndex: 72,
+    sp500: { name: 'S&P 500', value: 0, change: 0, changePercent: 0 },
+    nasdaq: { name: 'NASDAQ', value: 0, change: 0, changePercent: 0 },
+    dowJones: { name: 'Dow Jones', value: 0, change: 0, changePercent: 0 },
+    vix: { name: 'VIX', value: 0, change: 0, changePercent: 0 },
+    fearGreedIndex: 50,
     marketStatus: 'open',
     lastUpdated: new Date().toISOString(),
   };

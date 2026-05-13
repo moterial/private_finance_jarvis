@@ -18,6 +18,7 @@ export interface StockSignal {
   marketCap: string;
   sector: string;
   lastUpdated: string;
+  sparkline?: number[]; // recent close prices for mini chart
 }
 
 export interface SourceMention {

@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { fetchRedditPosts } from '@/lib/services/reddit';
 import { fetchTweets } from '@/lib/services/twitter';
 import { fetchNews } from '@/lib/services/news';
-import { generateAnalysis, getMarketOverview } from '@/lib/services/analyzer';
+import { generateAnalysis, getMarketOverview, computeFearGreed } from '@/lib/services/analyzer';
 import { orchestrateAgents } from '@/lib/agents/orchestrator';
 import { getRealMarketOverview, getBatchQuotes } from '@/lib/services/stockdata';
+import { yfChart } from '@/lib/services/yahoo';
 import { generateAIInsights, generateAIStrategy, isAIEnabled } from '@/lib/services/ai';
 import { detectAnomalies } from '@/lib/services/anomaly';
 import { withCache, cacheKey } from '@/lib/cache';
@@ -41,7 +42,52 @@ export async function GET(request: NextRequest) {
     const marketOverview = await withCache('data:market', async () => {
       const realMarket = await getRealMarketOverview();
       const fallbackMarket = getMarketOverview();
-      return realMarket ? { ...fallbackMarket, ...realMarket } : fallbackMarket;
+      const merged = realMarket ? { ...fallbackMarket, ...realMarket } : fallbackMarket;
+
+      // Compute real Fear & Greed index from sentiment + VIX
+      merged.fearGreedIndex = computeFearGreed(
+        analysis.marketSentimentScore,
+        merged.vix.value,
+        analysis.topBullish.length,
+        analysis.topBearish.length,
+      );
+
+      // Determine market status from time
+      const now = new Date();
+      const nyHour = Number(now.toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false }));
+      const nyMin = Number(now.toLocaleString('en-US', { timeZone: 'America/New_York', minute: 'numeric' }));
+      const day = now.getDay();
+      const mins = nyHour * 60 + nyMin;
+      if (day === 0 || day === 6) merged.marketStatus = 'closed';
+      else if (mins >= 570 && mins < 960) merged.marketStatus = 'open'; // 9:30-16:00
+      else if (mins >= 240 && mins < 570) merged.marketStatus = 'pre-market';
+      else if (mins >= 960 && mins < 1200) merged.marketStatus = 'after-hours';
+      else merged.marketStatus = 'closed';
+
+      return merged;
+    }, DATA_TTL);
+
+    // Attach real sparkline data (5-day closes) to signal tickers
+    await withCache('data:sparklines', async () => {
+      const allSignals = [...analysis.topBullish, ...analysis.topBearish];
+      const tickers = [...new Set(allSignals.map(s => s.ticker))].slice(0, 14);
+      const results = await Promise.allSettled(
+        tickers.map(async t => {
+          const chart = await yfChart(t, { range: '5d', interval: '1h' });
+          const closes = chart?.indicators?.quote?.[0]?.close?.filter((c: number | null) => c != null) || [];
+          return { ticker: t, closes: closes.slice(-20) as number[] };
+        })
+      );
+      const sparkMap = new Map<string, number[]>();
+      for (const r of results) {
+        if (r.status === 'fulfilled' && r.value.closes.length > 0) {
+          sparkMap.set(r.value.ticker, r.value.closes);
+        }
+      }
+      for (const sig of allSignals) {
+        sig.sparkline = sparkMap.get(sig.ticker);
+      }
+      return true;
     }, DATA_TTL);
 
     if (phase === 'fast') {
