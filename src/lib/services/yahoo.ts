@@ -83,9 +83,15 @@ async function refreshCrumb(): Promise<{ crumb: string; cookie: string }> {
 }
 
 function extractCookies(res: Response): string | null {
-  const setCookieHeader = res.headers.get('set-cookie') || '';
-  if (!setCookieHeader) return null;
-  const cookies = setCookieHeader.split(',').map(c => c.split(';')[0].trim()).filter(Boolean).join('; ');
+  // Node.js undici may use getSetCookie() for multiple set-cookie headers
+  let rawCookies: string[] = [];
+  if (typeof (res.headers as any).getSetCookie === 'function') {
+    rawCookies = (res.headers as any).getSetCookie();
+  } else {
+    const setCookieHeader = res.headers.get('set-cookie') || '';
+    if (setCookieHeader) rawCookies = setCookieHeader.split(',');
+  }
+  const cookies = rawCookies.map(c => c.split(';')[0].trim()).filter(Boolean).join('; ');
   return cookies || null;
 }
 
