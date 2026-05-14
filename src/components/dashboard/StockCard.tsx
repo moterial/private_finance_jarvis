@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { StockSignal } from '@/lib/types';
-import { cn, formatPrice, formatPercent, getConfidenceColor, formatNumber } from '@/lib/utils';
+import { cn, formatPrice, formatPercent, getConfidenceColor } from '@/lib/utils';
 import { TrendingUp, TrendingDown, ChevronRight, BarChart2, Users, Newspaper } from 'lucide-react';
 
 interface StockCardProps {
@@ -160,53 +160,41 @@ export default function StockCard({ signal, rank, onClick }: StockCardProps) {
         </div>
       </div>
 
-      {/* Source indicators */}
-      <div className="flex items-center gap-3 mb-3">
-        {signal.sources.map(src => (
-          <div key={src.source} className="flex items-center gap-1 group/src">
-            {src.source === 'reddit' && <Users className="w-3 h-3 text-jarvis-gray-500 group-hover/src:text-jarvis-amber transition-colors" />}
-            {src.source === 'twitter' && <BarChart2 className="w-3 h-3 text-jarvis-gray-500 group-hover/src:text-jarvis-accent transition-colors" />}
-            {src.source === 'news' && <Newspaper className="w-3 h-3 text-jarvis-gray-500 group-hover/src:text-jarvis-green transition-colors" />}
-            <span className="text-xs font-mono text-jarvis-gray-500">{src.count}</span>
-          </div>
-        ))}
-        <span className="text-xs text-jarvis-gray-600 ml-auto">
-          Vol: {formatNumber(signal.volume)} · MCap: {signal.marketCap}
-        </span>
-      </div>
-
-      {/* JARVIS Trade Targets */}
+      {/* JARVIS Trade Targets — the most important info */}
       {signal.entryPrice && signal.exitTarget && signal.stopLoss && (
         <div className={cn(
-          'flex items-center gap-2 mb-2 px-2 py-1.5 rounded-md text-xs font-mono border',
+          'flex flex-wrap items-center gap-x-2 gap-y-0.5 mb-2 px-2 py-1 rounded-md text-[11px] font-mono border',
           isUp ? 'bg-jarvis-green/5 border-jarvis-green/15' : 'bg-jarvis-red/5 border-jarvis-red/15'
         )}>
-          <div className="flex items-center gap-1">
-            <span className="text-jarvis-gray-500">入</span>
-            <span className="text-jarvis-accent">{formatPrice(signal.entryPrice)}</span>
-          </div>
+          <span className="text-jarvis-accent">入 {formatPrice(signal.entryPrice)}</span>
           <span className="text-jarvis-gray-700">→</span>
-          <div className="flex items-center gap-1">
-            <span className="text-jarvis-gray-500">目標</span>
-            <span className="text-jarvis-green">{formatPrice(signal.exitTarget)}</span>
-          </div>
+          <span className="text-jarvis-green">目標 {formatPrice(signal.exitTarget)}</span>
           <span className="text-jarvis-gray-700">|</span>
-          <div className="flex items-center gap-1">
-            <span className="text-jarvis-gray-500">止損</span>
-            <span className="text-jarvis-red">{formatPrice(signal.stopLoss)}</span>
-          </div>
+          <span className="text-jarvis-red">止損 {formatPrice(signal.stopLoss)}</span>
           {signal.riskReward && (
-            <span className="text-jarvis-gray-500 ml-auto">R:R {signal.riskReward}</span>
+            <span className="text-jarvis-accent ml-auto">R:R {signal.riskReward}</span>
           )}
         </div>
       )}
 
-      {/* Key reason */}
-      {signal.reasons[0] && (
-        <p className="text-sm text-jarvis-gray-400 line-clamp-2 leading-relaxed">
-          {signal.reasons[0]}
-        </p>
-      )}
+      {/* Key reason + sources inline */}
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
+          {signal.sources.map(src => (
+            <div key={src.source} className="flex items-center gap-0.5">
+              {src.source === 'reddit' && <Users className="w-2.5 h-2.5 text-jarvis-gray-600" />}
+              {src.source === 'twitter' && <BarChart2 className="w-2.5 h-2.5 text-jarvis-gray-600" />}
+              {src.source === 'news' && <Newspaper className="w-2.5 h-2.5 text-jarvis-gray-600" />}
+              <span className="text-[10px] font-mono text-jarvis-gray-600">{src.count}</span>
+            </div>
+          ))}
+        </div>
+        {signal.reasons[0] && (
+          <p className="text-[11px] text-jarvis-gray-500 line-clamp-1 leading-tight">
+            {signal.reasons[0]}
+          </p>
+        )}
+      </div>
 
       {/* Hover indicator — slides in */}
       <div className="absolute right-3 top-1/2 -translate-y-1/2 translate-x-2 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-200">

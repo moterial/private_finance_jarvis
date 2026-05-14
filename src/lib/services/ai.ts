@@ -206,14 +206,20 @@ Return as JSON: { "insights": ["insight1", "insight2", ...] }${getLanguageInstru
 
 Analyze this market data and generate insights:
 
-BULLISH SIGNALS: ${bullish.slice(0, 5).map(s => `${s.ticker}(${s.confidence}%)`).join(', ')}
-BEARISH SIGNALS: ${bearish.slice(0, 5).map(s => `${s.ticker}(${s.confidence}%)`).join(', ')}
+BULLISH SIGNALS (with real prices):
+${bullish.slice(0, 5).map(s => `- ${s.ticker} $${s.currentPrice.toFixed(2)} (${s.priceChangePercent > 0 ? '+' : ''}${s.priceChangePercent.toFixed(1)}%) conf:${s.confidence}%${s.entryPrice ? ` entry:$${s.entryPrice} target:$${s.exitTarget} stop:$${s.stopLoss} R:R=${s.riskReward}` : ''} — ${s.reasons[0] || ''}`).join('\n')}
+
+BEARISH SIGNALS:
+${bearish.slice(0, 5).map(s => `- ${s.ticker} $${s.currentPrice.toFixed(2)} (${s.priceChangePercent > 0 ? '+' : ''}${s.priceChangePercent.toFixed(1)}%) conf:${s.confidence}% — ${s.reasons[0] || ''}`).join('\n')}
+
 TRENDING TOPICS: ${topics.map(t => `${t.topic}(${t.sentiment})`).join(', ')}
 MARKET SENTIMENT: ${marketSentiment.toFixed(2)}
 
-TOP NEWS: ${topNews}
-REDDIT BUZZ: ${topReddit}
-TWITTER: ${topTweets}`;
+NEWS: ${topNews}
+REDDIT: ${topReddit}
+TWITTER: ${topTweets}
+
+IMPORTANT: Use the EXACT prices and levels above. Each insight must include a specific ticker, price, and action.`;
 
   const result = await chatJSON<{ insights: string[] }>(systemPrompt, userPrompt, 800);
   return result?.insights ?? null;

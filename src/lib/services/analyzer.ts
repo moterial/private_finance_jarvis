@@ -303,28 +303,37 @@ function generateInsights(
 ): string[] {
   const insights: string[] = [];
 
+  // Actionable bullish insight with real prices
   if (bullish.length > 0) {
-    insights.push(`Strong bullish signals detected for ${bullish.slice(0, 3).map(s => s.ticker).join(', ')} driven by multi-source consensus.`);
+    const top = bullish[0];
+    const entry = top.entryPrice ? `入場 $${top.entryPrice}` : `現價 $${top.currentPrice.toFixed(2)}`;
+    const target = top.exitTarget ? ` → 目標 $${top.exitTarget}` : '';
+    const stop = top.stopLoss ? ` | 止損 $${top.stopLoss}` : '';
+    insights.push(`${top.ticker} (${top.confidence}% 信心): ${entry}${target}${stop}。${top.reasons[0] || ''}`);
   }
 
+  // Bearish warning with specific level
   if (bearish.length > 0) {
-    insights.push(`Bearish sentiment growing around ${bearish.slice(0, 2).map(s => s.ticker).join(', ')} — monitor for potential downside.`);
+    const bear = bearish[0];
+    const price = bear.currentPrice > 0 ? ` (現價 $${bear.currentPrice.toFixed(2)}, ${bear.priceChangePercent > 0 ? '+' : ''}${bear.priceChangePercent.toFixed(1)}%)` : '';
+    insights.push(`⚠️ ${bear.ticker}${price} 出現看空信號 — ${bear.reasons[0] || '注意下行風險'}`);
   }
 
-  const risingTopics = topics.filter(t => t.trend === 'rising');
-  if (risingTopics.length > 0) {
-    insights.push(`Trending themes: ${risingTopics.map(t => t.topic).join(', ')} — gaining significant attention across platforms.`);
+  // Second bullish pick
+  if (bullish.length > 1) {
+    const s = bullish[1];
+    const rr = s.riskReward || '';
+    insights.push(`${s.ticker} $${s.currentPrice.toFixed(2)} ${s.direction === 'up' ? '▲' : '▼'}${Math.abs(s.priceChangePercent).toFixed(1)}% — ${rr ? `R:R ${rr}` : `信心 ${s.confidence}%`}${s.reasons[0] ? '. ' + s.reasons[0] : ''}`);
   }
 
+  // Sentiment context with actionable framing
   if (marketSentiment > 0.3) {
-    insights.push('Overall market sentiment is strongly bullish — consider taking profits on extended positions.');
+    insights.push(`市場貪婪指標偏高 (${(marketSentiment * 100).toFixed(0)}) — 已延伸的持倉考慮部分獲利`);
   } else if (marketSentiment < -0.3) {
-    insights.push('Market-wide bearish sentiment detected — potential buying opportunity for long-term investors.');
+    insights.push(`市場恐慌指標偏高 (${(marketSentiment * 100).toFixed(0)}) — 逢低布局優質標的`);
   }
 
-  insights.push('AI/semiconductor sector continues to dominate social media discussion with overwhelmingly positive sentiment.');
-
-  return insights;
+  return insights.slice(0, 4);
 }
 
 /**
