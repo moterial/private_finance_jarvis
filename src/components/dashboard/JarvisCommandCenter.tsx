@@ -86,11 +86,17 @@ export default function JarvisCommandCenter({ analysis, marketOverview, aiNarrat
           </div>
         </div>
 
-        {/* AI Narrative */}
+        {/* AI Narrative — Macro Context */}
         {aiNarrative && (
           <div className="mb-4 p-3 rounded-lg bg-jarvis-gray-900/60 border border-jarvis-gray-800/50">
-            <p className="text-sm text-jarvis-gray-300 leading-relaxed italic">
-              &ldquo;{aiNarrative}&rdquo;
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <Shield className="w-3 h-3 text-jarvis-accent" />
+              <span className="text-[10px] font-mono uppercase tracking-wider text-jarvis-accent">
+                {locale === 'zh' ? '今日市場全局' : 'MACRO CONTEXT'}
+              </span>
+            </div>
+            <p className="text-sm text-jarvis-gray-300 leading-relaxed">
+              {aiNarrative}
             </p>
           </div>
         )}
@@ -115,14 +121,19 @@ export default function JarvisCommandCenter({ analysis, marketOverview, aiNarrat
           </div>
         </div>
 
-        {/* Key Insights (bullet points) */}
+        {/* Key Insights — Micro Signals */}
         {analysis.keyInsights.length > 0 && (
           <div className="flex items-start gap-2 pt-3 border-t border-jarvis-gray-800/50">
             <Zap className="w-3.5 h-3.5 text-yellow-400 mt-0.5 shrink-0" />
-            <div className="text-xs text-jarvis-gray-400 space-y-0.5">
-              {analysis.keyInsights.slice(0, 3).map((insight, i) => (
-                <p key={i}>• {insight}</p>
-              ))}
+            <div>
+              <span className="text-[10px] font-mono uppercase tracking-wider text-yellow-400/80 block mb-1">
+                {locale === 'zh' ? '異常信號' : 'ANOMALY SIGNALS'}
+              </span>
+              <div className="text-xs text-jarvis-gray-400 space-y-0.5">
+                {analysis.keyInsights.slice(0, 3).map((insight, i) => (
+                  <p key={i}>⚡ {insight}</p>
+                ))}
+              </div>
             </div>
           </div>
         )}
