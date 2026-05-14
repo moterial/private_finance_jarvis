@@ -1,7 +1,7 @@
 import { AgentState, AgentFinding, ExpertSummary, ExpertPick, ChainReaction, SectorRotation } from '../types/extended';
 import { StockSignal, RedditPost, Tweet, NewsArticle, TrendingTopic, AnalysisReport } from '../types';
 import { analyzeSupplyChain } from '../analysis/supply-chain';
-import { generateCandleData, analyzePriceAction } from '../analysis/price-action';
+import { fetchRealCandles, analyzePriceAction } from '../analysis/price-action';
 import { generateAIExpertNarrative, generateAISectorRotation, isAIEnabled } from '../services/ai';
 
 // ============ Agent States ============
@@ -94,11 +94,11 @@ export function runSocialAgent(redditPosts: RedditPost[], tweets: Tweet[]): Agen
 }
 
 // ============ Technical Agent ============
-export function runTechnicalAgent(tickers: string[]): AgentFinding[] {
+export async function runTechnicalAgent(tickers: string[]): Promise<AgentFinding[]> {
   const findings: AgentFinding[] = [];
 
   for (const ticker of tickers) {
-    const candles = generateCandleData(ticker, 60);
+    const candles = await fetchRealCandles(ticker, 60);
     const report = analyzePriceAction(candles, ticker);
 
     if (report.recommendation === 'buy' || report.recommendation === 'sell') {
@@ -196,10 +196,11 @@ export async function runExpertAgent(
   else if (alerts.length > 3) overallOutlook = 'cautious';
 
   // Generate top picks
-  const topPicks: ExpertPick[] = analysis.topBullish.slice(0, 5).map(signal => {
-    const candles = generateCandleData(signal.ticker, 60);
+  const topPicks: ExpertPick[] = [];
+  for (const signal of analysis.topBullish.slice(0, 5)) {
+    const candles = await fetchRealCandles(signal.ticker, 60);
     const ta = analyzePriceAction(candles, signal.ticker);
-    return {
+    topPicks.push({
       ticker: signal.ticker,
       action: signal.confidence > 80 ? 'strong-buy' : signal.confidence > 60 ? 'buy' : 'hold',
       reasoning: `${signal.reasons[0] || 'Strong multi-source sentiment'}. Technical: ${ta.summary.split('.')[0]}.`,
@@ -208,8 +209,8 @@ export async function runExpertAgent(
       stopLoss: ta.stopLoss || signal.currentPrice * 0.95,
       timeframe: signal.confidence > 80 ? '1-2 weeks' : '2-4 weeks',
       confidence: signal.confidence,
-    };
-  });
+    });
+  }
 
   // Avoid list
   const avoidList = analysis.topBearish
@@ -342,7 +343,7 @@ export async function orchestrateAgents(
     ...analysis.topBullish.map(s => s.ticker),
     ...analysis.topBearish.map(s => s.ticker),
   ])];
-  const techFindings = runTechnicalAgent(allTickers);
+  const techFindings = await runTechnicalAgent(allTickers);
   allFindings.push(...techFindings);
   updateAgentState(agentStates, 'technical', 'active', techFindings, Date.now() - startTime);
 

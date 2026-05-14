@@ -82,6 +82,7 @@ export async function yfQuote(symbol: string): Promise<{
   regularMarketOpen: number;
   regularMarketDayHigh: number;
   regularMarketDayLow: number;
+  regularMarketVolume: number;
   shortName: string;
   symbol: string;
   marketCap?: number;
@@ -93,6 +94,9 @@ export async function yfQuote(symbol: string): Promise<{
   const m = data.meta;
   const prevClose = m.chartPreviousClose ?? m.previousClose ?? 0;
   const price = m.regularMarketPrice ?? 0;
+  // Volume from indicators if available
+  const vol = data.indicators?.quote?.[0]?.volume;
+  const lastVol = Array.isArray(vol) ? vol[vol.length - 1] ?? 0 : 0;
   return {
     regularMarketPrice: price,
     regularMarketChange: price - prevClose,
@@ -101,6 +105,7 @@ export async function yfQuote(symbol: string): Promise<{
     regularMarketOpen: m.regularMarketOpen ?? price,
     regularMarketDayHigh: m.regularMarketDayHigh ?? price,
     regularMarketDayLow: m.regularMarketDayLow ?? price,
+    regularMarketVolume: m.regularMarketVolume ?? lastVol,
     shortName: m.shortName || m.symbol || symbol,
     symbol: m.symbol || symbol,
     longName: m.longName,

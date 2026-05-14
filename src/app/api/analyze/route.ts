@@ -32,9 +32,9 @@ export async function GET(request: NextRequest) {
     // Fetch real prices for tickers mentioned in social/news data
     const SIGNAL_TICKERS = ['NVDA', 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'AMD', 'PLTR', 'INTC', 'JPM', 'NFLX', 'COIN', 'DIS'];
     const realQuotes = await withCache('data:signal-prices', () => getBatchQuotes(SIGNAL_TICKERS), DATA_TTL);
-    const realPrices = new Map<string, { price: number; change: number; changePercent: number }>();
+    const realPrices = new Map<string, { price: number; change: number; changePercent: number; volume?: number }>();
     for (const [ticker, q] of realQuotes) {
-      realPrices.set(ticker, { price: q.currentPrice, change: q.change, changePercent: q.changePercent });
+      realPrices.set(ticker, { price: q.currentPrice, change: q.change, changePercent: q.changePercent, volume: q.volume });
     }
 
     const analysis = generateAnalysis(redditPosts, tweets, newsArticles, realPrices);

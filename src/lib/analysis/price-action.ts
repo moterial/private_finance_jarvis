@@ -1,42 +1,42 @@
 import { CandleData, PriceActionSignal, TechnicalReport } from '../types/extended';
 
-export function generateCandleData(ticker: string, days: number = 60): CandleData[] {
-  // Deterministic seed from ticker name
-  let seed = 0;
-  for (let i = 0; i < ticker.length; i++) seed += ticker.charCodeAt(i) * (i + 1);
+/** Fetch REAL OHLCV candles from Yahoo Finance v8 chart API */
+export async function fetchRealCandles(ticker: string, days: number = 60): Promise<CandleData[]> {
+  try {
+    const { yfChart } = await import('../services/yahoo');
+    const range = days <= 30 ? '1mo' : days <= 90 ? '3mo' : '6mo';
+    const result = await yfChart(ticker, { range, interval: '1d' });
+    const ts = result?.chart?.result?.[0];
+    if (!ts) return [];
 
-  const basePrice = getBasePrice(ticker);
-  const volatility = getVolatility(ticker);
-  const candles: CandleData[] = [];
-  let price = basePrice * (0.85 + pseudoRandom(seed++) * 0.15);
+    const timestamps: number[] = ts.timestamp || [];
+    const q = ts.indicators?.quote?.[0];
+    if (!q || timestamps.length === 0) return [];
 
-  for (let i = days; i >= 0; i--) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
-    if (date.getDay() === 0 || date.getDay() === 6) continue;
-
-    const change = (pseudoRandom(seed++) - 0.48) * volatility * price;
-    const open = price;
-    const close = price + change;
-    const highExtra = Math.abs(change) * (0.2 + pseudoRandom(seed++) * 0.8);
-    const lowExtra = Math.abs(change) * (0.2 + pseudoRandom(seed++) * 0.8);
-    const high = Math.max(open, close) + highExtra;
-    const low = Math.min(open, close) - lowExtra;
-    const volume = Math.floor(1000000 + pseudoRandom(seed++) * 50000000);
-
-    candles.push({
-      date: date.toISOString().split('T')[0],
-      open: Number(open.toFixed(2)),
-      high: Number(high.toFixed(2)),
-      low: Number(low.toFixed(2)),
-      close: Number(close.toFixed(2)),
-      volume,
-    });
-
-    price = close;
+    const candles: CandleData[] = [];
+    for (let i = 0; i < timestamps.length; i++) {
+      const o = q.open?.[i], h = q.high?.[i], l = q.low?.[i], c = q.close?.[i], v = q.volume?.[i];
+      if (o == null || h == null || l == null || c == null) continue;
+      candles.push({
+        date: new Date(timestamps[i] * 1000).toISOString().split('T')[0],
+        open: Number(o.toFixed(2)),
+        high: Number(h.toFixed(2)),
+        low: Number(l.toFixed(2)),
+        close: Number(c.toFixed(2)),
+        volume: v || 0,
+      });
+    }
+    return candles;
+  } catch (e) {
+    console.error(`[PriceAction] Failed to fetch real candles for ${ticker}:`, e);
+    return [];
   }
+}
 
-  return candles;
+/** @deprecated Use fetchRealCandles() instead. Kept only as last-resort empty fallback. */
+export function generateCandleData(_ticker: string, _days: number = 60): CandleData[] {
+  // Return empty — forces caller to handle missing data gracefully
+  return [];
 }
 
 export function analyzePriceAction(candles: CandleData[], ticker: string): TechnicalReport {
@@ -315,31 +315,6 @@ function generateRecommendation(
   }
 
   return { recommendation, entryZone, stopLoss, targets };
-}
-
-function getBasePrice(ticker: string): number {
-  const prices: Record<string, number> = {
-    NVDA: 142.50, AAPL: 198.30, MSFT: 445.20, GOOGL: 178.90, AMZN: 195.40,
-    META: 525.80, TSLA: 248.60, AMD: 168.40, PLTR: 27.80, INTC: 31.20,
-    JPM: 205.10, NFLX: 685.30, COIN: 225.40, DIS: 112.80, BA: 178.50,
-    V: 285.60, MA: 468.90, PYPL: 67.30, SQ: 78.40, SOFI: 8.90,
-    NIO: 5.40, RIVN: 12.80, SNOW: 165.20, CRM: 275.40, SHOP: 78.60,
-  };
-  return prices[ticker] || 100;
-}
-
-function getVolatility(ticker: string): number {
-  const vol: Record<string, number> = {
-    NVDA: 0.035, TSLA: 0.04, AMD: 0.035, COIN: 0.045, PLTR: 0.04,
-    NIO: 0.05, RIVN: 0.045, SOFI: 0.04, AAPL: 0.015, MSFT: 0.015,
-    GOOGL: 0.02, JPM: 0.015, V: 0.012, MA: 0.012,
-  };
-  return vol[ticker] || 0.025;
-}
-
-function pseudoRandom(seed: number): number {
-  const x = Math.sin(seed * 9301 + 49297) * 233280;
-  return x - Math.floor(x);
 }
 
 function getEmptyReport(ticker: string): TechnicalReport {

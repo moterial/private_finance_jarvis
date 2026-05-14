@@ -4,7 +4,7 @@ export function generateAnalysis(
   redditPosts: RedditPost[],
   tweets: Tweet[],
   newsArticles: NewsArticle[],
-  realPrices?: Map<string, { price: number; change: number; changePercent: number }>,
+  realPrices?: Map<string, { price: number; change: number; changePercent: number; volume?: number }>,
 ): AnalysisReport {
   const tickerData = aggregateTickerData(redditPosts, tweets, newsArticles);
   const signals = generateSignals(tickerData, realPrices);
@@ -188,7 +188,7 @@ function computeTargets(price: number, direction: 'up' | 'down', confidence: num
 
 function generateSignals(
   tickerData: Map<string, TickerAggregation>,
-  realPrices?: Map<string, { price: number; change: number; changePercent: number }>,
+  realPrices?: Map<string, { price: number; change: number; changePercent: number; volume?: number }>,
 ): StockSignal[] {
   const signals: StockSignal[] = [];
 
@@ -206,8 +206,11 @@ function generateSignals(
     const sourceWeight = agg.sources.length * 7;
     const confidence = Math.min(Math.round(mentionWeight + sentimentWeight + sourceWeight), 98);
 
-    const priceChange = live ? live.change : price * (avgScore * (2 + Math.random() * 3) / 100);
-    const priceChangePercent = live ? live.changePercent : (avgScore * (2 + Math.random() * 3));
+    const priceChange = live ? live.change : 0;
+    const priceChangePercent = live ? live.changePercent : 0;
+
+    // Skip tickers without real price data — no fake signals
+    if (!live) continue;
 
     signals.push({
       ticker,
@@ -221,8 +224,8 @@ function generateSignals(
       direction,
       reasons: [...new Set(agg.reasons)].slice(0, 5),
       sources: agg.sources,
-      volume: info.volume,
-      marketCap: info.marketCap,
+      volume: live?.volume || 0,
+      marketCap: info.sector, // sector used as tag; real mcap shown separately
       sector: info.sector,
       lastUpdated: new Date().toISOString(),
       // JARVIS actionable price targets (technical-based)

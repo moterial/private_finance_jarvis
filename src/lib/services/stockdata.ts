@@ -20,6 +20,8 @@ export interface StockQuote {
   open: number;
   previousClose: number;
   timestamp: number;
+  marketCap?: number;
+  volume?: number;
 }
 
 export async function getQuote(ticker: string): Promise<StockQuote | null> {
@@ -73,6 +75,7 @@ async function getQuoteYahoo(ticker: string): Promise<StockQuote | null> {
       open: q.regularMarketOpen ?? q.regularMarketPrice,
       previousClose: q.previousClose ?? 0,
       timestamp: Math.floor(Date.now() / 1000),
+      volume: q.regularMarketVolume ?? 0,
     };
   } catch (error) {
     console.error(`[Yahoo] Quote failed for ${ticker}:`, error);

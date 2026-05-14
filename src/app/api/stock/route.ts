@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateCandleData, analyzePriceAction } from '@/lib/analysis/price-action';
+import { fetchRealCandles, analyzePriceAction } from '@/lib/analysis/price-action';
 import { analyzeSupplyChain } from '@/lib/analysis/supply-chain';
 import { getRealCandles, getQuote, getCompanyNews } from '@/lib/services/stockdata';
 import { generateAIStockAnalysis } from '@/lib/services/ai';
@@ -30,10 +30,10 @@ export async function GET(request: NextRequest) {
   const { days, interval } = tfConfig[timeframe] || tfConfig['3mo'];
 
   try {
-    // Try real candle data first, fall back to synthetic
+    // Fetch real candle data — no fake fallback
     const realCandles = await getRealCandles(upperTicker, days, interval);
-    const candles = realCandles || generateCandleData(upperTicker, days);
-    const isRealData = !!realCandles;
+    const candles = realCandles || await fetchRealCandles(upperTicker, days);
+    const isRealData = candles.length > 0;
 
     const technicalReport = analyzePriceAction(candles, upperTicker);
     const chainReactions = analyzeSupplyChain(upperTicker, 'bullish', `${upperTicker} momentum analysis`);

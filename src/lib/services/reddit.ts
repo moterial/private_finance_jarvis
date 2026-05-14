@@ -55,8 +55,8 @@ export async function fetchRedditPosts(): Promise<RedditPost[]> {
   }
 
   if (allPosts.length === 0) {
-    console.warn('[Reddit] No posts fetched from any subreddit, using fallback');
-    return getMockRedditPosts();
+    console.warn('[Reddit] No posts fetched from any subreddit, returning empty');
+    return [];
   }
 
   // Sort by score descending, return top results
@@ -123,16 +123,4 @@ function analyzeSentiment(text: string): { sentiment: 'bullish' | 'bearish' | 'n
   };
 }
 
-// ============ Fallback Mock ============
-function getMockRedditPosts(): RedditPost[] {
-  return [
-    { id: 'r1', title: '$NVDA earnings next week - massive AI demand driving growth 🚀', subreddit: 'wallstreetbets', score: 15234, numComments: 2341, url: 'https://reddit.com/r/wallstreetbets/1', created: new Date(Date.now() - 3600000).toISOString(), sentiment: 'bullish', sentimentScore: 0.85, tickers: ['NVDA'], author: 'diamond_hands_42' },
-    { id: 'r2', title: 'AAPL breaking out of consolidation - $200 price target', subreddit: 'stocks', score: 8921, numComments: 1205, url: 'https://reddit.com/r/stocks/2', created: new Date(Date.now() - 7200000).toISOString(), sentiment: 'bullish', sentimentScore: 0.72, tickers: ['AAPL'], author: 'value_investor99' },
-    { id: 'r3', title: 'TSLA overvalued at current levels? PE ratio is insane', subreddit: 'investing', score: 6543, numComments: 3421, url: 'https://reddit.com/r/investing/3', created: new Date(Date.now() - 10800000).toISOString(), sentiment: 'bearish', sentimentScore: -0.65, tickers: ['TSLA'], author: 'bear_thesis' },
-    { id: 'r4', title: 'AMD stealing market share from Intel - DD inside 📊', subreddit: 'wallstreetbets', score: 12100, numComments: 1890, url: 'https://reddit.com/r/wallstreetbets/4', created: new Date(Date.now() - 14400000).toISOString(), sentiment: 'bullish', sentimentScore: 0.78, tickers: ['AMD', 'INTC'], author: 'chipgang' },
-    { id: 'r5', title: 'META AI investments paying off - Llama models crushing it', subreddit: 'stocks', score: 9870, numComments: 1567, url: 'https://reddit.com/r/stocks/5', created: new Date(Date.now() - 18000000).toISOString(), sentiment: 'bullish', sentimentScore: 0.69, tickers: ['META'], author: 'ai_bull_2024' },
-    { id: 'r6', title: 'PLTR government contracts expanding - long term hold 💎', subreddit: 'stocks', score: 7650, numComments: 980, url: 'https://reddit.com/r/stocks/6', created: new Date(Date.now() - 21600000).toISOString(), sentiment: 'bullish', sentimentScore: 0.61, tickers: ['PLTR'], author: 'data_miner' },
-    { id: 'r7', title: 'Warning: Commercial real estate impacting JPM and regional banks', subreddit: 'investing', score: 5430, numComments: 2100, url: 'https://reddit.com/r/investing/7', created: new Date(Date.now() - 25200000).toISOString(), sentiment: 'bearish', sentimentScore: -0.55, tickers: ['JPM'], author: 'macro_watcher' },
-    { id: 'r8', title: 'MSFT Copilot revenue exceeding expectations - cloud dominance', subreddit: 'stocks', score: 11200, numComments: 1340, url: 'https://reddit.com/r/stocks/8', created: new Date(Date.now() - 28800000).toISOString(), sentiment: 'bullish', sentimentScore: 0.82, tickers: ['MSFT'], author: 'cloud_king' },
-  ];
-}
+// Dead mock removed — all data must be real

@@ -27,19 +27,8 @@ function generateSparkline(prices?: number[], isUp?: boolean, confidence?: numbe
     }).join(' ');
   }
 
-  // Fallback: deterministic fake sparkline
-  const points = 12;
-  const seed = (confidence || 50) * 137;
-  const vals: number[] = [];
-  let v = (isUp ?? true) ? h * 0.7 : h * 0.3;
-  for (let i = 0; i < points; i++) {
-    const noise = Math.sin(seed + i * 1.7) * h * 0.15 + Math.cos(seed * 0.3 + i * 2.1) * h * 0.1;
-    const trend = (isUp ?? true) ? -((i / points) * h * 0.4) : ((i / points) * h * 0.4);
-    v = Math.max(2, Math.min(h - 2, v + noise * 0.5 + trend * 0.08));
-    vals.push(v);
-  }
-  const step = w / (points - 1);
-  return vals.map((y, i) => `${i === 0 ? 'M' : 'L'}${(i * step).toFixed(1)},${y.toFixed(1)}`).join(' ');
+  // No real data — return empty (no fake chart)
+  return '';
 }
 
 export default function StockCard({ signal, rank, onClick }: StockCardProps) {

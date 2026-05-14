@@ -41,8 +41,8 @@ export async function fetchNews(): Promise<NewsArticle[]> {
   }
 
   if (allArticles.length === 0) {
-    console.warn('[News] All RSS feeds failed, using fallback');
-    return getMockNews();
+    console.warn('[News] All RSS feeds failed, returning empty');
+    return [];
   }
 
   // Sort by date descending, deduplicate by title similarity
@@ -241,18 +241,4 @@ function analyzeNewsSentiment(text: string): { sentiment: 'bullish' | 'bearish' 
   };
 }
 
-// ============ Fallback ============
-function getMockNews(): NewsArticle[] {
-  return [
-    { id: 'n1', title: 'NVIDIA Reports Record Data Center Revenue Driven by AI Demand', description: 'NVIDIA Corporation announced quarterly revenue of $35.1 billion, up 94% from a year ago.', source: 'Reuters', url: '#', publishedAt: new Date(Date.now() - 1800000).toISOString(), sentiment: 'bullish', sentimentScore: 0.85, tickers: ['NVDA'], category: 'earnings' },
-    { id: 'n2', title: 'Apple Expands AI Features Across Product Lineup', description: 'Apple Inc reported services revenue of $26.3B, beating analyst estimates.', source: 'Bloomberg', url: '#', publishedAt: new Date(Date.now() - 5400000).toISOString(), sentiment: 'bullish', sentimentScore: 0.72, tickers: ['AAPL'], category: 'earnings' },
-    { id: 'n3', title: 'Tesla Faces Increasing Competition in China as BYD Launches New Models', description: 'Tesla\'s market share in China declined for the third consecutive month.', source: 'CNBC', url: '#', publishedAt: new Date(Date.now() - 9000000).toISOString(), sentiment: 'bearish', sentimentScore: -0.62, tickers: ['TSLA'], category: 'competition' },
-    { id: 'n4', title: 'Microsoft Azure Revenue Growth Accelerates', description: 'Microsoft reported cloud revenue growth of 29%, driven by Azure AI services.', source: 'WSJ', url: '#', publishedAt: new Date(Date.now() - 12600000).toISOString(), sentiment: 'bullish', sentimentScore: 0.78, tickers: ['MSFT'], category: 'earnings' },
-    { id: 'n5', title: 'Fed Signals Potential Rate Cuts in Coming Months', description: 'Federal Reserve Chair indicated that rate cuts could begin as early as the next meeting.', source: 'Financial Times', url: '#', publishedAt: new Date(Date.now() - 16200000).toISOString(), sentiment: 'bullish', sentimentScore: 0.55, tickers: [], category: 'macro' },
-    { id: 'n6', title: 'AMD Data Center GPU Shipments Exceed Expectations', description: 'AMD reported MI300X shipments exceeded $4 billion in the quarter.', source: 'MarketWatch', url: '#', publishedAt: new Date(Date.now() - 21600000).toISOString(), sentiment: 'bullish', sentimentScore: 0.81, tickers: ['AMD'], category: 'earnings' },
-    { id: 'n7', title: 'JPMorgan Warns of Commercial Real Estate Risks', description: 'JPMorgan CEO warned that commercial real estate remains a risk sector.', source: 'Bloomberg', url: '#', publishedAt: new Date(Date.now() - 25200000).toISOString(), sentiment: 'bearish', sentimentScore: -0.52, tickers: ['JPM'], category: 'risk' },
-    { id: 'n8', title: 'Palantir Wins Major Defense Contract Worth $480M', description: 'Palantir Technologies secured a new contract with the U.S. Army.', source: 'Defense News', url: '#', publishedAt: new Date(Date.now() - 28800000).toISOString(), sentiment: 'bullish', sentimentScore: 0.68, tickers: ['PLTR'], category: 'contracts' },
-    { id: 'n9', title: 'Google DeepMind Breakthrough Sends Alphabet Stock Higher', description: 'Alphabet shares surged after Google DeepMind announced a breakthrough in AI.', source: 'TechCrunch', url: '#', publishedAt: new Date(Date.now() - 32400000).toISOString(), sentiment: 'bullish', sentimentScore: 0.79, tickers: ['GOOGL'], category: 'technology' },
-    { id: 'n10', title: 'Meta Platforms Ad Revenue Growth May Slow', description: 'Analysts warn that Meta ad revenue growth could face headwinds.', source: 'Barrons', url: '#', publishedAt: new Date(Date.now() - 36000000).toISOString(), sentiment: 'bearish', sentimentScore: -0.45, tickers: ['META'], category: 'competition' },
-  ];
-}
+// Dead mock removed — all data must be real
