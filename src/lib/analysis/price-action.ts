@@ -5,8 +5,8 @@ export async function fetchRealCandles(ticker: string, days: number = 60): Promi
   try {
     const { yfChart } = await import('../services/yahoo');
     const range = days <= 30 ? '1mo' : days <= 90 ? '3mo' : '6mo';
-    const result = await yfChart(ticker, { range, interval: '1d' });
-    const ts = result?.chart?.result?.[0];
+    // yfChart already returns json.chart.result[0] — do NOT double-unwrap
+    const ts = await yfChart(ticker, { range, interval: '1d' });
     if (!ts) return [];
 
     const timestamps: number[] = ts.timestamp || [];

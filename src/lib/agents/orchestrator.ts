@@ -232,13 +232,16 @@ export async function runExpertAgent(
     sectorRotation = aiSectorRotation;
   }
 
-  // Key risks
-  const keyRisks = [
-    'Elevated VIX and potential rate decision uncertainty',
-    'Geopolitical tensions affecting semiconductor supply chains',
-    alerts.length > 0 ? `${alerts.length} active risk alerts from news monitoring` : null,
-    analysis.riskLevel === 'high' ? 'Overall market risk level elevated' : null,
-  ].filter(Boolean) as string[];
+  // Key risks — derived from real data, not hardcoded
+  const keyRisks: string[] = [];
+  if (alerts.length > 0) keyRisks.push(`${alerts.length} active bearish alert(s): ${alerts.slice(0, 3).map(a => a.title).join('; ')}`);
+  if (analysis.topBearish.length > 3) keyRisks.push(`${analysis.topBearish.length} stocks showing bearish signals — broad-based selling pressure`);
+  if (analysis.marketSentimentScore < -0.3) keyRisks.push(`Market sentiment deeply negative (${analysis.marketSentimentScore.toFixed(2)}) — risk-off environment`);
+  if (analysis.riskLevel === 'high' || analysis.riskLevel === 'extreme') keyRisks.push(`Overall risk level: ${analysis.riskLevel.toUpperCase()} — reduce position sizes`);
+  for (const cr of chainReactions.filter(c => c.confidence > 70).slice(0, 2)) {
+    keyRisks.push(`Supply chain risk: ${cr.triggerTicker} → ${cr.impactedTickers.map(t => t.ticker).join(', ')}`);
+  }
+  if (keyRisks.length === 0) keyRisks.push('No elevated risks detected — normal market conditions');
 
   // Determine market phase
   let marketPhase = 'Accumulation Phase';
