@@ -40,6 +40,7 @@ const JournalPanel = dynamic(() => import('@/components/journal/JournalPanel'), 
 const EconomicCalendar = dynamic(() => import('@/components/dashboard/EconomicCalendar'), { loading: () => <PanelSkeleton /> });
 const CryptoWidget = dynamic(() => import('@/components/dashboard/CryptoWidget'), { loading: () => <PanelSkeleton /> });
 const ExportPdfButton = dynamic(() => import('@/components/dashboard/ExportPdfButton'), { ssr: false });
+const JarvisCommandCenter = dynamic(() => import('@/components/dashboard/JarvisCommandCenter'));
 
 interface DashboardData {
   analysis: AnalysisReport;
@@ -564,6 +565,13 @@ export default function DashboardPage() {
               {/* Overview Tab */}
               {activeTab === 'overview' && (
                 <div className="space-y-6">
+                  {/* JARVIS Command Center — Hero section with actionable trades */}
+                  <JarvisCommandCenter
+                    analysis={analysis}
+                    marketOverview={marketOverview}
+                    aiNarrative={data?.agents?.expertSummary?.narrative || analysis.keyInsights[0] || null}
+                    topPicks={data?.agents?.expertSummary?.topPicks}
+                  />
                   <MarketOverviewComponent data={marketOverview} />
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                     <div className="lg:col-span-5 space-y-6">

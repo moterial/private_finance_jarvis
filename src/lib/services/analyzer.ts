@@ -159,6 +159,33 @@ const STOCK_INFO: Record<string, { name: string; price: number; marketCap: strin
   DIS: { name: 'Walt Disney Co.', price: 112.80, marketCap: '206B', sector: 'Communication', volume: 9800000 },
 };
 
+// Compute JARVIS entry/exit/stop targets from price, direction, confidence, and sentiment score
+function computeTargets(price: number, direction: 'up' | 'down', confidence: number, avgScore: number) {
+  if (!price || price <= 0) return {};
+  // Confidence-based move expectation: higher confidence = wider targets
+  const baseMove = 0.02 + (confidence / 100) * 0.06; // 2%-8% range based on confidence
+  const sentimentBoost = Math.abs(avgScore) * 0.03; // 0-3% boost from strong sentiment
+
+  if (direction === 'up') {
+    const entry = Number((price * (1 - 0.005)).toFixed(2)); // Entry slightly below current (0.5% dip buy)
+    const exitTarget = Number((price * (1 + baseMove + sentimentBoost)).toFixed(2));
+    const stopLoss = Number((price * (1 - baseMove * 0.5)).toFixed(2)); // Stop at 50% of upside
+    const reward = exitTarget - entry;
+    const risk = entry - stopLoss;
+    const rr = risk > 0 ? `1:${(reward / risk).toFixed(1)}` : '1:2';
+    return { entryPrice: entry, exitTarget, stopLoss, riskReward: rr };
+  } else {
+    // Bearish: entry on bounce, target lower, stop above
+    const entry = Number((price * (1 + 0.005)).toFixed(2)); // Entry slightly above (sell on bounce)
+    const exitTarget = Number((price * (1 - baseMove - sentimentBoost)).toFixed(2));
+    const stopLoss = Number((price * (1 + baseMove * 0.5)).toFixed(2));
+    const reward = entry - exitTarget;
+    const risk = stopLoss - entry;
+    const rr = risk > 0 ? `1:${(reward / risk).toFixed(1)}` : '1:2';
+    return { entryPrice: entry, exitTarget, stopLoss, riskReward: rr };
+  }
+}
+
 function generateSignals(
   tickerData: Map<string, TickerAggregation>,
   realPrices?: Map<string, { price: number; change: number; changePercent: number }>,
@@ -198,6 +225,8 @@ function generateSignals(
       marketCap: info.marketCap,
       sector: info.sector,
       lastUpdated: new Date().toISOString(),
+      // JARVIS actionable price targets (technical-based)
+      ...computeTargets(price, direction, confidence, avgScore),
     });
   }
 

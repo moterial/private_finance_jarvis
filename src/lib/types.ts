@@ -19,6 +19,11 @@ export interface StockSignal {
   sector: string;
   lastUpdated: string;
   sparkline?: number[]; // recent close prices for mini chart
+  // JARVIS actionable targets
+  entryPrice?: number;
+  exitTarget?: number;
+  stopLoss?: number;
+  riskReward?: string;
 }
 
 export interface SourceMention {

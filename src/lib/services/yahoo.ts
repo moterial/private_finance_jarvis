@@ -15,28 +15,40 @@ async function getCrumb(): Promise<{ cookie: string; crumb: string }> {
     return _cachedCrumb;
   }
 
-  // Step 1: Get cookies from fc.yahoo.com
-  const r1 = await fetch('https://fc.yahoo.com', {
-    redirect: 'manual',
-    headers: { 'User-Agent': UA },
-    cache: 'no-store',
-  });
-  const setCookie = r1.headers.get('set-cookie') || '';
-  const cookieMatch = setCookie.match(/(A3=[^;]+)/);
-  const cookie = cookieMatch ? cookieMatch[1] : '';
-  if (!cookie) throw new Error('Failed to get Yahoo cookie');
+  // Try multiple approaches to get crumb (Render datacenter IPs may be throttled)
+  const hosts = ['https://query2.finance.yahoo.com', 'https://query1.finance.yahoo.com'];
 
-  // Step 2: Get crumb
-  const r2 = await fetch(`${YF_HOST}/v1/test/getcrumb`, {
-    headers: { 'User-Agent': UA, 'Cookie': cookie },
-    cache: 'no-store',
-  });
-  if (!r2.ok) throw new Error(`Failed to get crumb, status ${r2.status}, statusText: ${r2.statusText}`);
-  const crumb = await r2.text();
-  if (!crumb || crumb.length > 50) throw new Error('Invalid crumb response');
+  for (const host of hosts) {
+    try {
+      // Step 1: Get cookies from fc.yahoo.com
+      const r1 = await fetch('https://fc.yahoo.com', {
+        redirect: 'manual',
+        headers: { 'User-Agent': UA },
+        cache: 'no-store',
+      });
+      const setCookie = r1.headers.get('set-cookie') || '';
+      // Try multiple cookie patterns
+      const cookieMatch = setCookie.match(/(A3=[^;]+)/) || setCookie.match(/(A1=[^;]+)/);
+      const cookie = cookieMatch ? cookieMatch[1] : '';
+      if (!cookie) continue;
 
-  _cachedCrumb = { cookie, crumb, ts: Date.now() };
-  return _cachedCrumb;
+      // Step 2: Get crumb
+      const r2 = await fetch(`${host}/v1/test/getcrumb`, {
+        headers: { 'User-Agent': UA, 'Cookie': cookie },
+        cache: 'no-store',
+      });
+      if (!r2.ok) continue;
+      const crumb = await r2.text();
+      if (!crumb || crumb.length > 50 || crumb.includes('<')) continue;
+
+      _cachedCrumb = { cookie, crumb, ts: Date.now() };
+      return _cachedCrumb;
+    } catch {
+      continue;
+    }
+  }
+
+  throw new Error('Failed to get Yahoo crumb from all hosts');
 }
 
 // ============ Raw Yahoo Fetch Helpers ============

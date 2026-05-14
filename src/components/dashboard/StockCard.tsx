@@ -186,6 +186,32 @@ export default function StockCard({ signal, rank, onClick }: StockCardProps) {
         </span>
       </div>
 
+      {/* JARVIS Trade Targets */}
+      {signal.entryPrice && signal.exitTarget && signal.stopLoss && (
+        <div className={cn(
+          'flex items-center gap-2 mb-2 px-2 py-1.5 rounded-md text-xs font-mono border',
+          isUp ? 'bg-jarvis-green/5 border-jarvis-green/15' : 'bg-jarvis-red/5 border-jarvis-red/15'
+        )}>
+          <div className="flex items-center gap-1">
+            <span className="text-jarvis-gray-500">入</span>
+            <span className="text-jarvis-accent">{formatPrice(signal.entryPrice)}</span>
+          </div>
+          <span className="text-jarvis-gray-700">→</span>
+          <div className="flex items-center gap-1">
+            <span className="text-jarvis-gray-500">目標</span>
+            <span className="text-jarvis-green">{formatPrice(signal.exitTarget)}</span>
+          </div>
+          <span className="text-jarvis-gray-700">|</span>
+          <div className="flex items-center gap-1">
+            <span className="text-jarvis-gray-500">止損</span>
+            <span className="text-jarvis-red">{formatPrice(signal.stopLoss)}</span>
+          </div>
+          {signal.riskReward && (
+            <span className="text-jarvis-gray-500 ml-auto">R:R {signal.riskReward}</span>
+          )}
+        </div>
+      )}
+
       {/* Key reason */}
       {signal.reasons[0] && (
         <p className="text-sm text-jarvis-gray-400 line-clamp-2 leading-relaxed">
