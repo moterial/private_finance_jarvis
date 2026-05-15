@@ -200,13 +200,31 @@ export async function runExpertAgent(
   for (const signal of analysis.topBullish.slice(0, 5)) {
     const candles = await fetchRealCandles(signal.ticker, 60);
     const ta = analyzePriceAction(candles, signal.ticker);
+    const price = signal.currentPrice;
+
+    // Only use TA targets if they make sense for a BULLISH pick (targets must be ABOVE current price)
+    const bullishTargets = ta.targets.filter(t => t > price);
+    const targets = bullishTargets.length > 0
+      ? bullishTargets.slice(0, 2)
+      : [Number((price * 1.05).toFixed(2)), Number((price * 1.10).toFixed(2))];
+
+    // Entry zone: use TA if it's a buy zone below current price, otherwise default
+    const entryZone = (ta.entryZone && ta.entryZone.low < price && ta.entryZone.high <= price * 1.02)
+      ? ta.entryZone
+      : { low: Number((price * 0.98).toFixed(2)), high: Number((price * 1.01).toFixed(2)) };
+
+    // Stop loss: must be BELOW entry for a bullish pick
+    const stopLoss = (ta.stopLoss && ta.stopLoss < entryZone.low)
+      ? ta.stopLoss
+      : Number((price * 0.95).toFixed(2));
+
     topPicks.push({
       ticker: signal.ticker,
       action: signal.confidence > 80 ? 'strong-buy' : signal.confidence > 60 ? 'buy' : 'hold',
       reasoning: `${signal.reasons[0] || 'Strong multi-source sentiment'}. Technical: ${ta.summary.split('.')[0]}.`,
-      entryZone: ta.entryZone || { low: signal.currentPrice * 0.98, high: signal.currentPrice * 1.01 },
-      targets: ta.targets.length > 0 ? ta.targets : [signal.currentPrice * 1.05, signal.currentPrice * 1.1],
-      stopLoss: ta.stopLoss || signal.currentPrice * 0.95,
+      entryZone,
+      targets,
+      stopLoss,
       timeframe: signal.confidence > 80 ? '1-2 weeks' : '2-4 weeks',
       confidence: signal.confidence,
     });
