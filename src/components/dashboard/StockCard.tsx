@@ -168,9 +168,9 @@ export default function StockCard({ signal, rank, onClick }: StockCardProps) {
         )}>
           <span className="text-jarvis-accent">入 {formatPrice(signal.entryPrice)}</span>
           <span className="text-jarvis-gray-700">→</span>
-          <span className="text-jarvis-green">目標 {formatPrice(signal.exitTarget)}</span>
+          <span className={isUp ? 'text-jarvis-green' : 'text-jarvis-red'}>目標 {formatPrice(signal.exitTarget)}</span>
           <span className="text-jarvis-gray-700">|</span>
-          <span className="text-jarvis-red">止損 {formatPrice(signal.stopLoss)}</span>
+          <span className={isUp ? 'text-jarvis-red' : 'text-jarvis-green'}>止損 {formatPrice(signal.stopLoss)}</span>
           {signal.riskReward && (
             <span className="text-jarvis-accent ml-auto">R:R {signal.riskReward}</span>
           )}

@@ -184,13 +184,13 @@ function TradeCard({ trade, rank, locale }: { trade: StockSignal; rank: number; 
         {trade.exitTarget && (
           <div className="flex justify-between">
             <span className="text-jarvis-gray-500">{locale === 'zh' ? '目標' : 'Target'}</span>
-            <span className="text-green-400">{formatPrice(trade.exitTarget)}</span>
+            <span className={isUp ? 'text-green-400' : 'text-red-400'}>{formatPrice(trade.exitTarget)}</span>
           </div>
         )}
         {trade.stopLoss && (
           <div className="flex justify-between">
             <span className="text-jarvis-gray-500">{locale === 'zh' ? '止損' : 'Stop'}</span>
-            <span className="text-red-400">{formatPrice(trade.stopLoss)}</span>
+            <span className={isUp ? 'text-red-400' : 'text-green-400'}>{formatPrice(trade.stopLoss)}</span>
           </div>
         )}
         {trade.riskReward && (
@@ -253,7 +253,7 @@ function ExpertPickCard({ pick, rank, locale }: { pick: ExpertPick; rank: number
         {pick.targets.length > 0 && (
           <div className="flex justify-between">
             <span className="text-jarvis-gray-500">{locale === 'zh' ? '目標' : 'Targets'}</span>
-            <span className="text-green-400">
+            <span className={isUp ? 'text-green-400' : 'text-red-400'}>
               {pick.targets.slice(0, 2).map(t => formatPrice(t)).join(' / ')}
             </span>
           </div>

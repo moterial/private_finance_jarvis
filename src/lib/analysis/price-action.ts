@@ -81,12 +81,18 @@ export function analyzePriceAction(candles: CandleData[], ticker: string): Techn
     current, trend, supportLevels, resistanceLevels, priceActionSignals
   );
 
-  // Risk/Reward ratio
+  // Risk/Reward ratio (works for both buy and sell)
   let riskRewardRatio: number | null = null;
   if (entryZone && stopLoss && targets.length > 0) {
-    const risk = entryZone.low - stopLoss;
-    const reward = targets[0] - entryZone.high;
-    if (risk > 0) riskRewardRatio = Number((reward / risk).toFixed(2));
+    if (recommendation === 'buy') {
+      const risk = entryZone.low - stopLoss;
+      const reward = targets[0] - entryZone.high;
+      if (risk > 0 && reward > 0) riskRewardRatio = Number((reward / risk).toFixed(2));
+    } else if (recommendation === 'sell') {
+      const risk = stopLoss - entryZone.high;
+      const reward = entryZone.low - targets[0];
+      if (risk > 0 && reward > 0) riskRewardRatio = Number((reward / risk).toFixed(2));
+    }
   }
 
   // Key levels
@@ -297,10 +303,11 @@ function generateRecommendation(
       high: Number((current.close * 1.01).toFixed(2)),
     };
     stopLoss = Number((nearestSupport * 0.98).toFixed(2));
+    // Ensure targets are ABOVE entry
+    const t1 = Math.max(nearestResistance, current.close * 1.03);
     targets = [
-      Number((nearestResistance).toFixed(2)),
-      Number((nearestResistance * 1.05).toFixed(2)),
-      Number((nearestResistance * 1.10).toFixed(2)),
+      Number(t1.toFixed(2)),
+      Number((t1 * 1.05).toFixed(2)),
     ];
   } else if (recommendation === 'sell') {
     entryZone = {
@@ -308,9 +315,11 @@ function generateRecommendation(
       high: Number((current.close * 1.02).toFixed(2)),
     };
     stopLoss = Number((nearestResistance * 1.02).toFixed(2));
+    // Ensure targets are BELOW entry
+    const t1 = Math.min(nearestSupport, current.close * 0.97);
     targets = [
-      Number((nearestSupport).toFixed(2)),
-      Number((nearestSupport * 0.95).toFixed(2)),
+      Number(t1.toFixed(2)),
+      Number((t1 * 0.95).toFixed(2)),
     ];
   }
 

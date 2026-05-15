@@ -315,8 +315,8 @@ export default function AddStockModal({ ticker, onClose }: AddStockModalProps) {
                   {report.entryZone && (
                     <div className="grid grid-cols-2 gap-3">
                       <div className="p-3 rounded-lg bg-jarvis-darker/50 border border-jarvis-gray-800/30">
-                        <span className="text-xs uppercase text-jarvis-gray-500">{t('stock.buyZone')}</span>
-                        <div className="text-sm font-mono text-jarvis-green mt-1">
+                        <span className="text-xs uppercase text-jarvis-gray-500">{report.recommendation === 'sell' ? t('stock.sellZone') : t('stock.buyZone')}</span>
+                        <div className={cn('text-sm font-mono mt-1', report.recommendation === 'sell' ? 'text-jarvis-red' : 'text-jarvis-green')}>
                           {formatPrice(report.entryZone.low)} - {formatPrice(report.entryZone.high)}
                         </div>
                       </div>
