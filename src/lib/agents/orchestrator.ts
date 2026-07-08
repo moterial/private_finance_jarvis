@@ -110,7 +110,7 @@ export async function runTechnicalAgent(tickers: string[]): Promise<AgentFinding
         title: `${report.recommendation.toUpperCase()} signal: ${ticker}`,
         description: report.summary,
         tickers: [ticker],
-        confidence: Math.round(report.trendStrength + 30),
+        confidence: Math.min(Math.round(report.trendStrength + 30), 95),
         timestamp: new Date().toISOString(),
         data: {
           trend: report.trend,
@@ -180,6 +180,7 @@ export async function runExpertAgent(
   allFindings: AgentFinding[],
   chainReactions: ChainReaction[],
   locale: string = 'en',
+  useAI: boolean = true,
 ): Promise<ExpertSummary> {
   // Aggregate all findings
   const highPriorityFindings = allFindings.filter(f => f.severity === 'high');
@@ -245,9 +246,11 @@ export async function runExpertAgent(
   ];
 
   let sectorRotation = fallbackSectorRotation;
-  const aiSectorRotation = await generateAISectorRotation(analysis.topBullish, analysis.topBearish, analysis.trendingTopics, locale);
-  if (aiSectorRotation && aiSectorRotation.length > 0) {
-    sectorRotation = aiSectorRotation;
+  if (useAI) {
+    const aiSectorRotation = await generateAISectorRotation(analysis.topBullish, analysis.topBearish, analysis.trendingTopics, locale);
+    if (aiSectorRotation && aiSectorRotation.length > 0) {
+      sectorRotation = aiSectorRotation;
+    }
   }
 
   // Key risks — derived from real data, not hardcoded
@@ -267,9 +270,9 @@ export async function runExpertAgent(
   else if (overallOutlook === 'bearish') marketPhase = 'Distribution Phase';
   else if (analysis.marketSentimentScore < -0.3) marketPhase = 'Markdown Phase (Correction)';
 
-  // Expert narrative — try AI first, fall back to rule-based
+  // Expert narrative — try AI first (only in the AI phase), fall back to rule-based
   const fallbackNarrative = generateExpertNarrative(overallOutlook, marketPhase, topPicks, avoidList, chainReactions, keyRisks);
-  const aiNarrative = await generateAIExpertNarrative(
+  const aiNarrative = useAI ? await generateAIExpertNarrative(
     overallOutlook,
     marketPhase,
     topPicks,
@@ -278,7 +281,7 @@ export async function runExpertAgent(
     keyRisks,
     analysis.marketSentimentScore,
     locale,
-  );
+  ) : null;
   const narrative = aiNarrative || fallbackNarrative;
 
   return {
@@ -344,6 +347,7 @@ export async function orchestrateAgents(
   tweets: Tweet[],
   newsArticles: NewsArticle[],
   locale: string = 'en',
+  useAI: boolean = true,
 ): Promise<OrchestratorResult> {
   const startTime = Date.now();
   const agentStates = createInitialAgentStates();
@@ -375,7 +379,7 @@ export async function orchestrateAgents(
   updateAgentState(agentStates, 'supplyChain', 'active', chainFindings, Date.now() - startTime);
 
   // Run Expert Agent (synthesizes everything)
-  const expertSummary = await runExpertAgent(analysis, allFindings, chainReactions, locale);
+  const expertSummary = await runExpertAgent(analysis, allFindings, chainReactions, locale, useAI);
   const expertFinding: AgentFinding = {
     id: 'expert-summary',
     agentId: 'expert',

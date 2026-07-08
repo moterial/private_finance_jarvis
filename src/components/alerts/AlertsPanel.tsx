@@ -45,7 +45,7 @@ export default function AlertsPanel() {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
       if (data) {
-        setAlerts(data.map(r => {
+        setAlerts(data.map((r: any) => {
           const condLabel = CONDITION_LABELS[r.condition];
           return {
             id: r.id,

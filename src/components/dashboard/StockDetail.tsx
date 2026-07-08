@@ -83,7 +83,7 @@ export default function StockDetail({ signal, onClose }: StockDetailProps) {
           </div>
           <div className="text-right">
             <span className="text-xl font-bold font-mono text-jarvis-white block">{formatPrice(signal.currentPrice)}</span>
-            <span className={cn('text-sm font-bold font-mono', isUp ? 'ticker-up' : 'ticker-down')}>
+            <span className={cn('text-sm font-bold font-mono', signal.priceChangePercent >= 0 ? 'ticker-up' : 'ticker-down')}>
               {formatPercent(signal.priceChangePercent)}
             </span>
           </div>

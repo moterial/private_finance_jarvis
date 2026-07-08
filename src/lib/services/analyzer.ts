@@ -5,6 +5,7 @@ export function generateAnalysis(
   tweets: Tweet[],
   newsArticles: NewsArticle[],
   realPrices?: Map<string, { price: number; change: number; changePercent: number; volume?: number }>,
+  locale: string = 'en',
 ): AnalysisReport {
   const tickerData = aggregateTickerData(redditPosts, tweets, newsArticles);
   const signals = generateSignals(tickerData, realPrices);
@@ -37,7 +38,7 @@ export function generateAnalysis(
     topBullish,
     topBearish,
     trendingTopics,
-    keyInsights: generateInsights(topBullish, topBearish, trendingTopics, avgSentiment),
+    keyInsights: generateInsights(topBullish, topBearish, trendingTopics, avgSentiment, locale),
     riskLevel: Math.abs(avgSentiment) > 0.6 ? 'high' : Math.abs(avgSentiment) > 0.3 ? 'medium' : 'low',
     dataSourceStatus: {
       reddit: redditPosts.length > 0,
@@ -53,6 +54,7 @@ interface TickerAggregation {
   scores: number[];
   sources: SourceMention[];
   reasons: string[];
+  scoresBySource: Record<string, number[]>;
 }
 
 function aggregateTickerData(
@@ -64,9 +66,14 @@ function aggregateTickerData(
 
   const getOrCreate = (ticker: string): TickerAggregation => {
     if (!map.has(ticker)) {
-      map.set(ticker, { ticker, mentions: 0, scores: [], sources: [], reasons: [] });
+      map.set(ticker, { ticker, mentions: 0, scores: [], sources: [], reasons: [], scoresBySource: {} });
     }
     return map.get(ticker)!;
+  };
+
+  const addScore = (agg: TickerAggregation, source: string, score: number) => {
+    agg.scores.push(score);
+    (agg.scoresBySource[source] ??= []).push(score);
   };
 
   // Aggregate Reddit
@@ -74,7 +81,7 @@ function aggregateTickerData(
     for (const ticker of post.tickers) {
       const agg = getOrCreate(ticker);
       agg.mentions++;
-      agg.scores.push(post.sentimentScore);
+      addScore(agg, 'reddit', post.sentimentScore);
 
       let redditSource = agg.sources.find(s => s.source === 'reddit');
       if (!redditSource) {
@@ -95,7 +102,7 @@ function aggregateTickerData(
     for (const ticker of tweet.tickers) {
       const agg = getOrCreate(ticker);
       agg.mentions++;
-      agg.scores.push(tweet.sentimentScore);
+      addScore(agg, 'twitter', tweet.sentimentScore);
 
       let twitterSource = agg.sources.find(s => s.source === 'twitter');
       if (!twitterSource) {
@@ -116,7 +123,7 @@ function aggregateTickerData(
     for (const ticker of article.tickers) {
       const agg = getOrCreate(ticker);
       agg.mentions++;
-      agg.scores.push(article.sentimentScore);
+      addScore(agg, 'news', article.sentimentScore);
 
       let newsSource = agg.sources.find(s => s.source === 'news');
       if (!newsSource) {
@@ -130,10 +137,10 @@ function aggregateTickerData(
     }
   }
 
-  // Finalize source sentiments
+  // Finalize source sentiments from each source's own scores
   for (const [, agg] of map) {
     for (const src of agg.sources) {
-      const srcScores = src.highlights.length > 0 ? agg.scores.slice(0, src.count) : [];
+      const srcScores = agg.scoresBySource[src.source] || [];
       src.score = srcScores.length > 0 ? srcScores.reduce((a, b) => a + b, 0) / srcScores.length : 0;
       src.sentiment = src.score > 0.1 ? 'bullish' : src.score < -0.1 ? 'bearish' : 'neutral';
     }
@@ -166,10 +173,14 @@ function computeTargets(price: number, direction: 'up' | 'down', confidence: num
   const baseMove = 0.02 + (confidence / 100) * 0.06; // 2%-8% range based on confidence
   const sentimentBoost = Math.abs(avgScore) * 0.03; // 0-3% boost from strong sentiment
 
+  // Stop distance measured from ENTRY (not current price) so R:R stays honest.
+  // Floor at 1.5% so low-confidence signals don't produce absurd 1:5+ ratios from a hairline stop.
+  const stopMove = Math.max(baseMove * 0.6, 0.015);
+
   if (direction === 'up') {
     const entry = Number((price * (1 - 0.005)).toFixed(2)); // Entry slightly below current (0.5% dip buy)
     const exitTarget = Number((price * (1 + baseMove + sentimentBoost)).toFixed(2));
-    const stopLoss = Number((price * (1 - baseMove * 0.5)).toFixed(2)); // Stop at 50% of upside
+    const stopLoss = Number((entry * (1 - stopMove)).toFixed(2));
     const reward = exitTarget - entry;
     const risk = entry - stopLoss;
     const rr = risk > 0 ? `1:${(reward / risk).toFixed(1)}` : '1:2';
@@ -178,7 +189,7 @@ function computeTargets(price: number, direction: 'up' | 'down', confidence: num
     // Bearish: entry on bounce, target lower, stop above
     const entry = Number((price * (1 + 0.005)).toFixed(2)); // Entry slightly above (sell on bounce)
     const exitTarget = Number((price * (1 - baseMove - sentimentBoost)).toFixed(2));
-    const stopLoss = Number((price * (1 + baseMove * 0.5)).toFixed(2));
+    const stopLoss = Number((entry * (1 + stopMove)).toFixed(2));
     const reward = entry - exitTarget;
     const risk = stopLoss - entry;
     const rr = risk > 0 ? `1:${(reward / risk).toFixed(1)}` : '1:2';
@@ -225,7 +236,7 @@ function generateSignals(
       reasons: [...new Set(agg.reasons)].slice(0, 5),
       sources: agg.sources,
       volume: live?.volume || 0,
-      marketCap: info.sector, // sector used as tag; real mcap shown separately
+      marketCap: info.marketCap,
       sector: info.sector,
       lastUpdated: new Date().toISOString(),
       // JARVIS actionable price targets (technical-based)
@@ -299,38 +310,51 @@ function generateInsights(
   bullish: StockSignal[],
   bearish: StockSignal[],
   topics: TrendingTopic[],
-  marketSentiment: number
+  marketSentiment: number,
+  locale: string = 'en',
 ): string[] {
   const insights: string[] = [];
+  const isZh = locale === 'zh';
 
   // Actionable bullish insight with real prices
   if (bullish.length > 0) {
     const top = bullish[0];
-    const entry = top.entryPrice ? `入場 $${top.entryPrice}` : `現價 $${top.currentPrice.toFixed(2)}`;
-    const target = top.exitTarget ? ` → 目標 $${top.exitTarget}` : '';
-    const stop = top.stopLoss ? ` | 止損 $${top.stopLoss}` : '';
-    insights.push(`${top.ticker} (${top.confidence}% 信心): ${entry}${target}${stop}。${top.reasons[0] || ''}`);
+    const entry = top.entryPrice
+      ? (isZh ? `入場 $${top.entryPrice}` : `Entry $${top.entryPrice}`)
+      : (isZh ? `現價 $${top.currentPrice.toFixed(2)}` : `Now $${top.currentPrice.toFixed(2)}`);
+    const target = top.exitTarget ? (isZh ? ` → 目標 $${top.exitTarget}` : ` → Target $${top.exitTarget}`) : '';
+    const stop = top.stopLoss ? (isZh ? ` | 止損 $${top.stopLoss}` : ` | Stop $${top.stopLoss}`) : '';
+    insights.push(isZh
+      ? `${top.ticker} (${top.confidence}% 信心): ${entry}${target}${stop}。${top.reasons[0] || ''}`
+      : `${top.ticker} (${top.confidence}% confidence): ${entry}${target}${stop}. ${top.reasons[0] || ''}`);
   }
 
   // Bearish warning with specific level
   if (bearish.length > 0) {
     const bear = bearish[0];
-    const price = bear.currentPrice > 0 ? ` (現價 $${bear.currentPrice.toFixed(2)}, ${bear.priceChangePercent > 0 ? '+' : ''}${bear.priceChangePercent.toFixed(1)}%)` : '';
-    insights.push(`⚠️ ${bear.ticker}${price} 出現看空信號 — ${bear.reasons[0] || '注意下行風險'}`);
+    const price = bear.currentPrice > 0 ? ` ($${bear.currentPrice.toFixed(2)}, ${bear.priceChangePercent > 0 ? '+' : ''}${bear.priceChangePercent.toFixed(1)}%)` : '';
+    insights.push(isZh
+      ? `⚠️ ${bear.ticker}${price} 出現看空信號 — ${bear.reasons[0] || '注意下行風險'}`
+      : `⚠️ ${bear.ticker}${price} flashing bearish signals — ${bear.reasons[0] || 'watch downside risk'}`);
   }
 
   // Second bullish pick
   if (bullish.length > 1) {
     const s = bullish[1];
     const rr = s.riskReward || '';
-    insights.push(`${s.ticker} $${s.currentPrice.toFixed(2)} ${s.direction === 'up' ? '▲' : '▼'}${Math.abs(s.priceChangePercent).toFixed(1)}% — ${rr ? `R:R ${rr}` : `信心 ${s.confidence}%`}${s.reasons[0] ? '. ' + s.reasons[0] : ''}`);
+    const confPart = rr ? `R:R ${rr}` : (isZh ? `信心 ${s.confidence}%` : `confidence ${s.confidence}%`);
+    insights.push(`${s.ticker} $${s.currentPrice.toFixed(2)} ${s.priceChangePercent >= 0 ? '▲' : '▼'}${Math.abs(s.priceChangePercent).toFixed(1)}% — ${confPart}${s.reasons[0] ? '. ' + s.reasons[0] : ''}`);
   }
 
   // Sentiment context with actionable framing
   if (marketSentiment > 0.3) {
-    insights.push(`市場貪婪指標偏高 (${(marketSentiment * 100).toFixed(0)}) — 已延伸的持倉考慮部分獲利`);
+    insights.push(isZh
+      ? `市場貪婪指標偏高 (${(marketSentiment * 100).toFixed(0)}) — 已延伸的持倉考慮部分獲利`
+      : `Market greed running hot (${(marketSentiment * 100).toFixed(0)}) — consider taking partial profits on extended positions`);
   } else if (marketSentiment < -0.3) {
-    insights.push(`市場恐慌指標偏高 (${(marketSentiment * 100).toFixed(0)}) — 逢低布局優質標的`);
+    insights.push(isZh
+      ? `市場恐慌指標偏高 (${(marketSentiment * 100).toFixed(0)}) — 逢低布局優質標的`
+      : `Fear elevated (${(marketSentiment * 100).toFixed(0)}) — accumulate quality names on weakness`);
   }
 
   return insights.slice(0, 4);

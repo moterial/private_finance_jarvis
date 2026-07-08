@@ -121,35 +121,62 @@ export async function yfQuoteBatch(symbols: string[]): Promise<any[]> {
     .filter(Boolean);
 }
 
-/** Fetch v7 options chain (NEEDS crumb) with retry */
+// yahoo-finance2 fallback client — handles Yahoo's cookie/crumb/consent flow
+// internally. The raw fc.yahoo.com cookie trick used by getCrumb() no longer
+// works from all networks, so this is the reliable path.
+let _yf2: any = null;
+async function getYf2(): Promise<any> {
+  if (_yf2) return _yf2;
+  const mod: any = await import('yahoo-finance2');
+  const YF = mod.default;
+  _yf2 = typeof YF === 'function' ? new YF() : YF;
+  return _yf2;
+}
+
+/** Fetch v7 options chain via raw crumb fetch, falling back to yahoo-finance2 */
 export async function yfOptions(symbol: string, date?: string): Promise<any> {
-  let lastError: Error | null = null;
+  // Attempt 1: raw v7 fetch with cached crumb (fastest when it works)
+  try {
+    const { cookie, crumb } = await getCrumb();
+    const params = new URLSearchParams({ crumb });
+    if (date) params.set('date', String(Math.floor(new Date(date).getTime() / 1000)));
 
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const { cookie, crumb } = await getCrumb();
-      const params = new URLSearchParams({ crumb });
-      if (date) params.set('date', String(Math.floor(new Date(date).getTime() / 1000)));
-
-      const url = `${YF_HOST}/v7/finance/options/${encodeURIComponent(symbol)}?${params}`;
-      const res = await fetch(url, {
-        headers: { 'User-Agent': UA, 'Cookie': cookie },
-        cache: 'no-store',
-      });
-      if (!res.ok) {
-        // Invalidate crumb on auth errors
-        if (res.status === 401 || res.status === 403) _cachedCrumb = null;
-        throw new Error(`yfOptions ${symbol}: ${res.status}`);
-      }
-      const json = await res.json();
-      return json?.optionChain?.result?.[0] || null;
-    } catch (e: any) {
-      lastError = e;
-      _cachedCrumb = null; // Force fresh crumb on next attempt
-      if (attempt < 2) await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+    const url = `${YF_HOST}/v7/finance/options/${encodeURIComponent(symbol)}?${params}`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': UA, 'Cookie': cookie },
+      cache: 'no-store',
+    });
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) _cachedCrumb = null;
+      throw new Error(`yfOptions ${symbol}: ${res.status}`);
     }
+    const json = await res.json();
+    return json?.optionChain?.result?.[0] || null;
+  } catch {
+    // fall through to yahoo-finance2
   }
-  throw lastError || new Error('yfOptions failed');
+
+  // Attempt 2: yahoo-finance2 (its own cookie jar + consent handling).
+  // Normalize Dates to epoch seconds so callers see the raw v7 shape.
+  const yf2 = await getYf2();
+  const result = await yf2.options(symbol, date ? { date: new Date(date) } : {});
+  if (!result) return null;
+
+  const toEpoch = (d: unknown): number =>
+    d instanceof Date ? Math.floor(d.getTime() / 1000)
+    : typeof d === 'number' ? d
+    : Math.floor(new Date(d as string).getTime() / 1000);
+
+  return {
+    ...result,
+    expirationDates: (result.expirationDates || []).map(toEpoch),
+    options: (result.options || []).map((o: any) => ({
+      ...o,
+      expirationDate: toEpoch(o.expirationDate),
+      calls: (o.calls || []).map((c: any) => ({ ...c, expiration: toEpoch(c.expiration) })),
+      puts: (o.puts || []).map((p: any) => ({ ...p, expiration: toEpoch(p.expiration) })),
+    })),
+  };
 }
 
 /**

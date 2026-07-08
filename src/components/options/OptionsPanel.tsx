@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useI18n } from '@/lib/i18n/context';
 import { cn } from '@/lib/utils';
-import { Loader2, TrendingUp, TrendingDown, Minus, Zap, Shield, BarChart3, Target, X, ChevronRight, Info, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Loader2, TrendingUp, TrendingDown, Minus, Zap, Shield, BarChart3, Target, X, ChevronRight, Info, AlertTriangle, CheckCircle, Radar, RefreshCw } from 'lucide-react';
 
 interface OptionContract {
   contractSymbol: string;
@@ -32,6 +32,41 @@ interface OptionsStrategy {
   breakeven: number[];
   netDebit: number;
   riskRewardRatio: string;
+}
+
+interface UnusualOption {
+  ticker: string;
+  currentPrice: number;
+  contractSymbol: string;
+  type: 'call' | 'put';
+  strike: number;
+  expiration: string;
+  lastPrice: number;
+  volume: number;
+  openInterest: number;
+  volOiRatio: number;
+  premiumVolume: number;
+  impliedVolatility: number;
+  pctOtm: number;
+  sentiment: 'bullish' | 'bearish';
+  score: number;
+}
+
+interface TickerFlowSummary {
+  ticker: string;
+  currentPrice: number;
+  putCallVolumeRatio: number;
+  totalCallPremium: number;
+  totalPutPremium: number;
+  netSentiment: 'bullish' | 'bearish' | 'neutral';
+  unusualCount: number;
+}
+
+interface OptionsFlowData {
+  unusual: UnusualOption[];
+  summaries: TickerFlowSummary[];
+  failedTickers: string[];
+  generatedAt: string;
 }
 
 interface OptionsData {
@@ -195,6 +230,13 @@ export default function OptionsPanel() {
     }
   };
 
+  const analyzeTicker = useCallback((t: string) => {
+    setInputValue(t);
+    setTicker(t);
+    setSelectedExpiration(undefined);
+    fetchOptions(t);
+  }, [fetchOptions]);
+
   useEffect(() => {
     if (ticker && selectedExpiration) {
       fetchOptions(ticker, selectedExpiration);
@@ -203,6 +245,9 @@ export default function OptionsPanel() {
 
   return (
     <div className="animate-fade-in space-y-6">
+      {/* Unusual Options Activity Scanner (期權異動) */}
+      <FlowScanner locale={locale} onSelectTicker={analyzeTicker} />
+
       {/* Search Bar */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-md">
@@ -554,6 +599,188 @@ export default function OptionsPanel() {
             {locale === 'zh' ? '\u8F38\u5165\u80A1\u7968\u4EE3\u78BC\u4EE5\u67E5\u770B\u671F\u6B0A\u93C8\u3001\u7B56\u7565\u5EFA\u8B70\u548CAI\u5206\u6790' : 'Enter a ticker to view options chain, strategies, and AI analysis'}
           </p>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ============ Unusual Options Activity Scanner (期權異動) ============
+function formatPremium(n: number): string {
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`;
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
+  return `$${n}`;
+}
+
+function FlowScanner({ locale, onSelectTicker }: { locale: string; onSelectTicker: (t: string) => void }) {
+  const [flow, setFlow] = useState<OptionsFlowData | null>(null);
+  const [flowLoading, setFlowLoading] = useState(true);
+  const [flowError, setFlowError] = useState(false);
+  const [expanded, setExpanded] = useState(true);
+  const zh = locale === 'zh';
+
+  const loadFlow = useCallback(async () => {
+    setFlowLoading(true);
+    setFlowError(false);
+    try {
+      const res = await fetch('/api/options-flow');
+      const json = await res.json();
+      if (json.success) setFlow(json.data);
+      else setFlowError(true);
+    } catch {
+      setFlowError(true);
+    } finally {
+      setFlowLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadFlow(); }, [loadFlow]);
+
+  return (
+    <div className="glass-panel p-4">
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-1">
+        <Radar className="w-4 h-4 text-jarvis-accent" />
+        <h3 className="text-sm font-semibold text-jarvis-white">
+          {zh ? '期權異動掃描' : 'Unusual Options Activity'}
+        </h3>
+        {flow && (
+          <span className="text-[10px] font-mono text-jarvis-gray-600">
+            {new Date(flow.generatedAt).toLocaleTimeString()}
+          </span>
+        )}
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={loadFlow}
+            disabled={flowLoading}
+            className="p-1.5 rounded-lg text-jarvis-gray-500 hover:text-jarvis-white hover:bg-jarvis-gray-800/50 transition-all disabled:opacity-40"
+            title={zh ? '重新掃描' : 'Rescan'}
+          >
+            <RefreshCw className={cn('w-3.5 h-3.5', flowLoading && 'animate-spin')} />
+          </button>
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="p-1.5 rounded-lg text-jarvis-gray-500 hover:text-jarvis-white hover:bg-jarvis-gray-800/50 transition-all"
+          >
+            <ChevronRight className={cn('w-3.5 h-3.5 transition-transform', expanded && 'rotate-90')} />
+          </button>
+        </div>
+      </div>
+      <p className="text-[11px] text-jarvis-gray-600 mb-3">
+        {zh
+          ? '偵測成交量遠超未平倉量的大額合約（新倉大單足跡）。數據延遲約 15 分鐘，Call 量視為偏多、Put 量視為偏空。'
+          : 'Flags contracts where volume dwarfs open interest (fresh positioning footprint). ~15min delayed; call volume read as bullish, put volume as bearish.'}
+      </p>
+
+      {expanded && (
+        <>
+          {flowLoading && !flow && (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="w-5 h-5 text-jarvis-accent animate-spin" />
+              <span className="ml-3 text-xs font-mono text-jarvis-gray-500">
+                {zh ? '掃描 14 檔股票期權鏈中...' : 'Scanning option chains across 14 tickers...'}
+              </span>
+            </div>
+          )}
+
+          {flowError && !flowLoading && (
+            <div className="text-center py-6 text-xs text-jarvis-gray-500">
+              {zh ? '掃描失敗 — Yahoo 數據暫時不可用，稍後再試' : 'Scan failed — Yahoo data temporarily unavailable, try again later'}
+            </div>
+          )}
+
+          {flow && (
+            <>
+              {/* Per-ticker sentiment chips */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-3">
+                {flow.summaries.map(s => (
+                  <button
+                    key={s.ticker}
+                    onClick={() => onSelectTicker(s.ticker)}
+                    className={cn(
+                      'shrink-0 px-2.5 py-1.5 rounded-lg border text-[11px] font-mono transition-all hover:scale-105',
+                      s.netSentiment === 'bullish' ? 'border-jarvis-green/30 bg-jarvis-green/5 text-jarvis-green' :
+                      s.netSentiment === 'bearish' ? 'border-jarvis-red/30 bg-jarvis-red/5 text-jarvis-red' :
+                      'border-jarvis-gray-800 bg-jarvis-gray-900/40 text-jarvis-gray-400'
+                    )}
+                    title={`${zh ? '權利金流向' : 'Premium flow'} — Call ${formatPremium(s.totalCallPremium)} / Put ${formatPremium(s.totalPutPremium)}`}
+                  >
+                    <span className="font-bold">{s.ticker}</span>
+                    <span className="ml-1.5 opacity-80">P/C {s.putCallVolumeRatio}</span>
+                    {s.unusualCount > 0 && (
+                      <span className="ml-1.5 px-1 rounded bg-jarvis-accent/20 text-jarvis-accent">{s.unusualCount}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* Unusual contracts table */}
+              {flow.unusual.length === 0 ? (
+                <div className="text-center py-6 text-xs text-jarvis-gray-500">
+                  {zh ? '目前沒有偵測到明顯異動（低成交時段常見）' : 'No unusual activity detected right now (common outside market hours)'}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[11px] font-mono">
+                    <thead>
+                      <tr className="text-jarvis-gray-600 uppercase tracking-wider">
+                        <th className="text-left py-1.5 pr-3">{zh ? '股票' : 'Ticker'}</th>
+                        <th className="text-left py-1.5 pr-3">{zh ? '合約' : 'Contract'}</th>
+                        <th className="text-right py-1.5 pr-3">{zh ? '成交量' : 'Vol'}</th>
+                        <th className="text-right py-1.5 pr-3">OI</th>
+                        <th className="text-right py-1.5 pr-3">Vol/OI</th>
+                        <th className="text-right py-1.5 pr-3">{zh ? '權利金' : 'Premium'}</th>
+                        <th className="text-right py-1.5 pr-3">IV</th>
+                        <th className="text-right py-1.5">{zh ? '方向' : 'Bias'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {flow.unusual.slice(0, 15).map(u => (
+                        <tr
+                          key={u.contractSymbol}
+                          onClick={() => onSelectTicker(u.ticker)}
+                          className="border-t border-jarvis-gray-800/40 hover:bg-jarvis-gray-800/30 cursor-pointer transition-colors"
+                        >
+                          <td className="py-2 pr-3 font-bold text-jarvis-white">{u.ticker}</td>
+                          <td className="py-2 pr-3">
+                            <span className={u.type === 'call' ? 'text-jarvis-green' : 'text-jarvis-red'}>
+                              {u.type === 'call' ? 'C' : 'P'} ${u.strike}
+                            </span>
+                            <span className="text-jarvis-gray-600 ml-1.5">{u.expiration.slice(5)}</span>
+                            {u.pctOtm > 0 && (
+                              <span className="text-jarvis-gray-600 ml-1.5">{u.pctOtm.toFixed(0)}% OTM</span>
+                            )}
+                          </td>
+                          <td className="py-2 pr-3 text-right text-jarvis-white">{u.volume.toLocaleString()}</td>
+                          <td className="py-2 pr-3 text-right text-jarvis-gray-500">{u.openInterest.toLocaleString()}</td>
+                          <td className="py-2 pr-3 text-right text-jarvis-accent font-bold">
+                            {u.openInterest === 0 ? (zh ? '全新倉' : 'NEW') : `${u.volOiRatio}x`}
+                          </td>
+                          <td className="py-2 pr-3 text-right text-jarvis-white">{formatPremium(u.premiumVolume)}</td>
+                          <td className="py-2 pr-3 text-right text-jarvis-gray-400">{u.impliedVolatility.toFixed(0)}%</td>
+                          <td className="py-2 text-right">
+                            <span className={cn(
+                              'px-1.5 py-0.5 rounded text-[10px] uppercase',
+                              u.sentiment === 'bullish' ? 'bg-jarvis-green/10 text-jarvis-green' : 'bg-jarvis-red/10 text-jarvis-red'
+                            )}>
+                              {u.sentiment === 'bullish' ? (zh ? '偏多' : 'Bull') : (zh ? '偏空' : 'Bear')}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {flow.failedTickers.length > 0 && (
+                <p className="mt-2 text-[10px] text-jarvis-gray-600">
+                  {zh ? `掃描失敗: ${flow.failedTickers.join(', ')}` : `Failed to scan: ${flow.failedTickers.join(', ')}`}
+                </p>
+              )}
+            </>
+          )}
+        </>
       )}
     </div>
   );

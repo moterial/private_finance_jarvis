@@ -290,8 +290,10 @@ function generateRecommendation(
   else if (bearScore > bullScore + 1) recommendation = 'sell';
   else recommendation = 'wait';
 
-  const nearestSupport = supports[0] || current.close * 0.95;
-  const nearestResistance = resistances[0] || current.close * 1.1;
+  // Nearest support must be BELOW price and nearest resistance ABOVE it —
+  // a swing low above the current price is not a usable stop level.
+  const nearestSupport = supports.find(s => s < current.close) || current.close * 0.95;
+  const nearestResistance = resistances.find(r => r > current.close) || current.close * 1.1;
 
   let entryZone: { low: number; high: number } | null = null;
   let stopLoss: number | null = null;

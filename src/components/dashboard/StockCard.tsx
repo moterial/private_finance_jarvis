@@ -119,9 +119,9 @@ export default function StockCard({ signal, rank, onClick }: StockCardProps) {
           <div className="text-sm font-mono text-jarvis-white">{formatPrice(signal.currentPrice)}</div>
           <div className={cn(
             'text-xs font-mono font-medium',
-            isUp ? 'text-jarvis-green' : 'text-jarvis-red'
+            signal.priceChange >= 0 ? 'text-jarvis-green' : 'text-jarvis-red'
           )}>
-            {isUp ? '+' : ''}{signal.priceChange} ({formatPercent(signal.priceChangePercent)})
+            {signal.priceChange >= 0 ? '+' : ''}{signal.priceChange} ({formatPercent(signal.priceChangePercent)})
           </div>
         </div>
       </div>

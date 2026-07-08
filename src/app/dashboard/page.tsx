@@ -158,22 +158,12 @@ export default function DashboardPage() {
         setCommandOpen(false);
         setMobileNavOpen(false);
       }
-      if (commandOpen) {
-        if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          setCommandIdx(prev => prev + 1);
-        } else if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          setCommandIdx(prev => Math.max(0, prev - 1));
-        } else if (e.key === 'Enter') {
-          e.preventDefault();
-          // Enter selection is handled via onKeyDown on the input
-        }
-      }
+      // Arrow/Enter navigation is handled by the palette input's own onKeyDown —
+      // handling it here too would double-move the selection.
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [commandOpen]);
+  }, []);
 
   // Data fetching
   const fetchData = useCallback(async () => {

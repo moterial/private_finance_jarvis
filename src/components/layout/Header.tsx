@@ -1,10 +1,8 @@
 'use client';
 
-import { Activity, Bell, RefreshCw, Wifi, Globe, LogOut } from 'lucide-react';
+import { Activity, Bell, RefreshCw, Wifi, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useI18n } from '@/lib/i18n/context';
-import { createClient } from '@/lib/supabase/client';
-import { useRouter } from 'next/navigation';
 
 interface HeaderProps {
   lastRefresh: string | null;
@@ -14,14 +12,6 @@ interface HeaderProps {
 
 export default function Header({ lastRefresh, isLoading, onRefresh }: HeaderProps) {
   const { locale, setLocale, t } = useI18n();
-  const router = useRouter();
-  const supabase = createClient();
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/auth');
-    router.refresh();
-  };
 
   return (
     <header className="sticky top-0 z-50 bg-jarvis-black/90 backdrop-blur-xl border-b border-jarvis-gray-800/50">
@@ -87,13 +77,6 @@ export default function Header({ lastRefresh, isLoading, onRefresh }: HeaderProp
           <button className="p-2 rounded-lg border border-jarvis-gray-800 hover:border-jarvis-gray-700 transition-all hover:bg-jarvis-gray-900 text-jarvis-gray-400 hover:text-jarvis-white relative">
             <Bell className="w-4 h-4" />
             <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-jarvis-red rounded-full" />
-          </button>
-          <button
-            onClick={handleLogout}
-            className="p-2 rounded-lg border border-jarvis-gray-800 hover:border-jarvis-red/30 transition-all hover:bg-jarvis-red/10 text-jarvis-gray-400 hover:text-jarvis-red"
-            title={locale === 'zh' ? '登出' : 'Sign out'}
-          >
-            <LogOut className="w-4 h-4" />
           </button>
         </div>
       </div>

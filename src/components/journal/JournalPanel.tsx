@@ -63,7 +63,7 @@ export default function JournalPanel() {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
       if (data) {
-        setEntries(data.map(r => ({
+        setEntries(data.map((r: any) => ({
           id: r.id,
           ticker: r.ticker,
           action: r.action,

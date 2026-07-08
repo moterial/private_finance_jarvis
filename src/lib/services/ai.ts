@@ -19,10 +19,25 @@ function isAIEnabled(): boolean {
 const MODEL = process.env.LLM_MODEL_NAME || 'gpt-4o-mini';
 
 // ============ Helper ============
-// DeepSeek reasoning models spend tokens on hidden reasoning_content before generating visible content.
+// Reasoning models (DeepSeek R1, Gemini 2.5 thinking) spend tokens on hidden reasoning
+// before generating visible content — with a tight max_tokens they return EMPTY content.
 // We multiply max_tokens to ensure enough budget for both reasoning + output.
-const IS_REASONING_MODEL = MODEL.includes('deepseek');
+const IS_REASONING_MODEL = MODEL.includes('deepseek') || MODEL.includes('gemini') || MODEL.includes('glm') || MODEL.includes('gpt-oss') || MODEL.includes('qwen');
 const TOKEN_MULTIPLIER = IS_REASONING_MODEL ? 8 : 1;
+
+// Gemini thinking models accept reasoning_effort via the OpenAI-compat endpoint.
+// Cap it at 'low' — unbounded thinking regularly blows past our request timeouts
+// on large JSON generations (e.g. the strategy plan).
+const EXTRA_PARAMS: Record<string, unknown> = MODEL.includes('gemini') ? { reasoning_effort: 'low' } : {};
+
+// NVIDIA NIM free tier queues GLM requests for minutes at a time (measured
+// ~275s per request). Stretch timeouts so calls can actually complete; results
+// are server-cached for 15 min so users mostly hit the cache, not the queue.
+const IS_SLOW_QUEUE_MODEL = MODEL.includes('glm');
+// 180s default: large-brain models (Qwen 397B) need >90s for big JSON
+// generations like the strategy plan. AI runs as background enrichment, so a
+// longer wait beats a fallback.
+const DEFAULT_JSON_TIMEOUT = IS_SLOW_QUEUE_MODEL ? 340000 : 180000;
 
 export async function chatCompletion(systemPrompt: string, userPrompt: string, maxTokens = 1500): Promise<string | null> {
   const client = getClient();
@@ -42,6 +57,7 @@ export async function chatCompletion(systemPrompt: string, userPrompt: string, m
       ],
       max_tokens: maxTokens * TOKEN_MULTIPLIER,
       temperature: 0.7,
+      ...EXTRA_PARAMS,
     });
     const choice = response.choices[0];
     // DeepSeek reasoning models may return content in reasoning_content when content is empty
@@ -55,7 +71,7 @@ export async function chatCompletion(systemPrompt: string, userPrompt: string, m
   }
 }
 
-export async function chatJSON<T>(systemPrompt: string, userPrompt: string, maxTokens = 2000, timeoutMs = 90000): Promise<T | null> {
+export async function chatJSON<T>(systemPrompt: string, userPrompt: string, maxTokens = 2000, timeoutMs = DEFAULT_JSON_TIMEOUT): Promise<T | null> {
   const client = getClient();
   if (!client) return null;
 
@@ -64,28 +80,49 @@ export async function chatJSON<T>(systemPrompt: string, userPrompt: string, maxT
     ? userPrompt + '\n\n[回覆語言：繁體中文。所有 JSON value 必須是中文。]'
     : userPrompt;
 
-  try {
+  const runRequest = async (useJsonMode: boolean): Promise<string | null> => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-    const response = await client.chat.completions.create({
-      model: MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: finalUserPrompt },
-      ],
-      max_tokens: maxTokens * TOKEN_MULTIPLIER,
-      temperature: 0.5,
-      response_format: { type: 'json_object' },
-    }, { signal: controller.signal });
-    clearTimeout(timer);
-    const choice = response.choices[0];
-    let content = choice?.message?.content;
-    // DeepSeek reasoning models: fallback to reasoning_content
-    if (!content) {
-      content = (choice?.message as unknown as Record<string, unknown>)?.reasoning_content as string | undefined || null;
+    try {
+      const response = await client.chat.completions.create({
+        model: MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: finalUserPrompt },
+        ],
+        max_tokens: maxTokens * TOKEN_MULTIPLIER,
+        temperature: 0.5,
+        ...(useJsonMode ? { response_format: { type: 'json_object' as const } } : {}),
+        ...EXTRA_PARAMS,
+      }, { signal: controller.signal });
+      const choice = response.choices[0];
+      // Reasoning models may put output in reasoning_content when content is empty
+      return choice?.message?.content
+        || ((choice?.message as unknown as Record<string, unknown>)?.reasoning_content as string | undefined)
+        || null;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  try {
+    let content: string | null;
+    try {
+      content = await runRequest(true);
+    } catch (e: unknown) {
+      // Some providers (e.g. certain NVIDIA NIM models) reject response_format —
+      // retry once in plain mode and parse the JSON out of the text.
+      const msg = String((e as Error)?.message || e);
+      const isBadRequest = msg.includes('400') || /response_format|json_object/i.test(msg);
+      if (!isBadRequest) throw e;
+      content = await runRequest(false);
     }
     if (!content) return null;
-    return JSON.parse(content) as T;
+    // Strip markdown fences / surrounding prose if the model added any
+    const jsonText = content.match(/```(?:json)?\s*([\s\S]*?)```/)?.[1]
+      || content.slice(content.indexOf('{'), content.lastIndexOf('}') + 1)
+      || content;
+    return JSON.parse(jsonText) as T;
   } catch (error) {
     console.error('[AI Service] OpenAI JSON parse error:', error);
     return null;
@@ -403,7 +440,7 @@ ${news.slice(0, 8).map(n => `- ${n.title}`).join('\n')}
 
 Based on this data, find the NON-OBVIOUS opportunities. What is mispriced? Where is the crowd wrong? What second-order effect is nobody pricing in? Create a strategy that gives the user a genuine edge — not generic advice.`;
 
-  const result = await chatJSON<StrategyPlan>(systemPrompt, userPrompt, 2500, 45000);
+  const result = await chatJSON<StrategyPlan>(systemPrompt, userPrompt, 2500, DEFAULT_JSON_TIMEOUT);
   if (result) return result;
 
   // Fallback: generate a basic strategy from the data if AI fails/times out

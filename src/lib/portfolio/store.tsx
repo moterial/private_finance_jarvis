@@ -31,23 +31,23 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
       if (!user || cancelled) return;
 
       const [posRes, wlRes] = await Promise.all([
-        supabase.from('portfolios').select('*').eq('user_id', user.id).order('added_at', { ascending: true }),
+        supabase.from('portfolios').select('*').eq('user_id', user.id).order('created_at', { ascending: true }),
         supabase.from('watchlist').select('ticker').eq('user_id', user.id),
       ]);
 
       if (cancelled) return;
 
-      const positions: PortfolioPosition[] = (posRes.data || []).map(r => ({
+      const positions: PortfolioPosition[] = (posRes.data || []).map((r: any) => ({
         ticker: r.ticker,
         name: r.ticker, // name is resolved client-side
         shares: Number(r.shares),
         avgCost: Number(r.avg_cost),
-        addedAt: r.added_at,
+        addedAt: r.added_at || r.created_at,
         notes: r.notes || '',
         sector: '',
       }));
 
-      const watchlist = (wlRes.data || []).map(r => r.ticker);
+      const watchlist = (wlRes.data || []).map((r: any) => r.ticker);
 
       setPortfolio({ positions, watchlist, lastUpdated: new Date().toISOString() });
     }

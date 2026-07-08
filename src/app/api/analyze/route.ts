@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       realPrices.set(ticker, { price: q.currentPrice, change: q.change, changePercent: q.changePercent, volume: q.volume });
     }
 
-    const analysis = generateAnalysis(redditPosts, tweets, newsArticles, realPrices);
+    const analysis = generateAnalysis(redditPosts, tweets, newsArticles, realPrices, locale);
 
     const marketOverview = await withCache('data:market', async () => {
       const realMarket = await getRealMarketOverview();
@@ -67,9 +67,11 @@ export async function GET(request: NextRequest) {
       return merged;
     }, DATA_TTL);
 
-    // Attach real sparkline data (5-day closes) to signal tickers
-    await withCache('data:sparklines', async () => {
-      const allSignals = [...analysis.topBullish, ...analysis.topBearish];
+    // Attach real sparkline data (5-day closes) to signal tickers.
+    // Only the fetched data is cached — the attach must run on every request
+    // because `analysis` is regenerated fresh each time.
+    const allSignals = [...analysis.topBullish, ...analysis.topBearish];
+    const sparkEntries = await withCache('data:sparklines', async () => {
       const tickers = [...new Set(allSignals.map(s => s.ticker))].slice(0, 14);
       const results = await Promise.allSettled(
         tickers.map(async t => {
@@ -78,22 +80,25 @@ export async function GET(request: NextRequest) {
           return { ticker: t, closes: closes.slice(-20) as number[] };
         })
       );
-      const sparkMap = new Map<string, number[]>();
+      const entries: [string, number[]][] = [];
       for (const r of results) {
         if (r.status === 'fulfilled' && r.value.closes.length > 0) {
-          sparkMap.set(r.value.ticker, r.value.closes);
+          entries.push([r.value.ticker, r.value.closes]);
         }
       }
-      for (const sig of allSignals) {
-        sig.sparkline = sparkMap.get(sig.ticker);
-      }
-      return true;
+      return entries;
     }, DATA_TTL);
+    const sparkMap = new Map<string, number[]>(sparkEntries);
+    for (const sig of allSignals) {
+      sig.sparkline = sparkMap.get(sig.ticker);
+    }
 
     if (phase === 'fast') {
       // Cached fast response — agents + anomaly detection shared across users
       const fastResult = await withCache(cacheKey('fast', locale), async () => {
-        const quickAgentResult = await orchestrateAgents(analysis, redditPosts, tweets, newsArticles, locale);
+        // useAI=false — the fast phase must return in seconds; AI narrative and
+        // sector rotation arrive later via the ai phase
+        const quickAgentResult = await orchestrateAgents(analysis, redditPosts, tweets, newsArticles, locale, false);
         const allSignals = [...analysis.topBullish, ...analysis.topBearish];
         const anomalies = detectAnomalies(allSignals, redditPosts, tweets, newsArticles, analysis.trendingTopics);
         return {
@@ -124,8 +129,6 @@ export async function GET(request: NextRequest) {
 
     if (phase === 'ai') {
       // Phase 2: AI enrichment — cached so multiple users share the same AI response
-      const aiCacheKey = cacheKey('ai', locale, new Date().toISOString().slice(0, 13)); // per-hour bucket
-
       const cachedAiResult = await withCache(cacheKey('ai:full', locale), async () => {
         const [aiInsights, agentResult, strategy] = await Promise.all([
           generateAIInsights(
